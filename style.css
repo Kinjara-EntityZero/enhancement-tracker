@@ -176,6 +176,23 @@ html, body {
 }
 .file-sync-badge button:hover { color: var(--fail); }
 
+.file-sync-pending {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.file-sync-forget {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.file-sync-forget:hover { color: var(--fail); }
+
 .btn {
   background: var(--panel-2);
   border: 1px solid var(--border);

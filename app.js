@@ -211,6 +211,55 @@
     renderFileStatus();
   }
 
+  // Shared by linkNewFile() and reconnectFile() — both end up (re)pointing this write-only
+  // sync at a file handle, and either one could be pointing at a file that already has real
+  // (possibly different) data in it. Returns true if it's safe to proceed and overwrite the
+  // file from here on, false if the caller should abort without touching anything.
+  async function checkExistingFileBeforeOverwrite(handle) {
+    let existingFile;
+    try {
+      existingFile = await handle.getFile();
+    } catch (e) {
+      showToast("Couldn't read the existing file — canceled");
+      return false;
+    }
+
+    if (existingFile.size === 0) return true;
+
+    let parsed = null;
+    try {
+      parsed = JSON.parse(await existingFile.text());
+    } catch (e) {
+      // Not valid JSON — still not empty, so still worth confirming below.
+    }
+    const looksLikeTrackerData = parsed && (parsed.sets || parsed.accessories);
+
+    if (looksLikeTrackerData) {
+      const useExisting = confirm(
+        "That file already has enhancement tracker data in it.\n\n" +
+        "OK — load that file's data into this tracker (use it as your save).\n" +
+        "Cancel — keep what's currently shown here, and overwrite the file with it instead."
+      );
+      if (useExisting) {
+        state = normalizeState(parsed);
+        save();
+        render();
+      }
+      return true;
+    }
+
+    const overwriteAnyway = confirm(
+      "That file already has content in it that doesn't look like tracker data.\n\n" +
+      "OK — overwrite it with this tracker's current data.\n" +
+      "Cancel — leave the file alone and cancel."
+    );
+    if (!overwriteAnyway) {
+      showToast("Canceled");
+      return false;
+    }
+    return true;
+  }
+
   async function linkNewFile() {
     if (!FS_SUPPORTED) {
       showToast("Your browser doesn't support direct file saving — use Export/Import instead");
@@ -223,51 +272,9 @@
       });
 
       // Linking is a write-only connection from here on — it overwrites the picked file on
-      // every change from now on. If that file already has something in it (an old save, a
-      // different device's export, ...), silently overwriting it with whatever's currently in
-      // THIS browser would be a good way to lose it. Ask first — and if we can't even tell
-      // what's in the file (permission hiccup, etc.), abort instead of guessing: a failed
-      // link with an error toast is a much safer failure mode than a silent overwrite.
-      let existingFile;
-      try {
-        existingFile = await handle.getFile();
-      } catch (e) {
-        showToast("Couldn't read the selected file — link canceled");
-        return;
-      }
-
-      if (existingFile.size > 0) {
-        let parsed = null;
-        try {
-          parsed = JSON.parse(await existingFile.text());
-        } catch (e) {
-          // Not valid JSON — still not empty, so still worth confirming below.
-        }
-        const looksLikeTrackerData = parsed && (parsed.sets || parsed.accessories);
-
-        if (looksLikeTrackerData) {
-          const useExisting = confirm(
-            "That file already has enhancement tracker data in it.\n\n" +
-            "OK — load that file's data into this tracker (use it as your save).\n" +
-            "Cancel — keep what's currently shown here, and overwrite the file with it instead."
-          );
-          if (useExisting) {
-            state = normalizeState(parsed);
-            save();
-            render();
-          }
-        } else {
-          const overwriteAnyway = confirm(
-            "That file already has content in it that doesn't look like tracker data.\n\n" +
-            "OK — overwrite it with this tracker's current data.\n" +
-            "Cancel — leave the file alone and cancel linking."
-          );
-          if (!overwriteAnyway) {
-            showToast("Link canceled");
-            return;
-          }
-        }
-      }
+      // every change from now on, so if it already has something in it (an old save, a
+      // different device's export, ...) that's worth checking before committing to that.
+      if (!(await checkExistingFileBeforeOverwrite(handle))) return;
 
       fileHandle = handle;
       pendingHandle = null;
@@ -283,12 +290,17 @@
     if (!pendingHandle) return;
     try {
       const perm = await pendingHandle.requestPermission({ mode: "readwrite" });
-      if (perm === "granted") {
-        fileHandle = pendingHandle;
-        pendingHandle = null;
-        showToast("Reconnected to save file");
-        await writeStateToFile();
-      }
+      if (perm !== "granted") { renderFileStatus(); return; }
+
+      // Same risk as a fresh link: this browser's current state might not match what's
+      // actually in the file anymore (localStorage cleared, different profile, ...), and
+      // reconnecting would otherwise silently overwrite it with no check at all.
+      if (!(await checkExistingFileBeforeOverwrite(pendingHandle))) { renderFileStatus(); return; }
+
+      fileHandle = pendingHandle;
+      pendingHandle = null;
+      showToast("Reconnected to save file");
+      await writeStateToFile();
     } catch (e) {
       showToast("Could not reconnect");
     }
@@ -320,11 +332,13 @@
       document.getElementById("btn-unlink-file").addEventListener("click", unlinkFile);
     } else if (fileStatus === "pending-permission" && pendingHandle) {
       el.innerHTML = `
-        <button class="btn btn-ghost" id="btn-reconnect-file" title="Re-grant access to continue auto-saving">
-          Reconnect save file
-        </button>
+        <div class="file-sync-pending" title="Re-grant access to continue auto-saving to this file, or forget it to pick a different one">
+          <button class="btn btn-ghost" id="btn-reconnect-file">Reconnect save file</button>
+          <button class="file-sync-forget" id="btn-unlink-file" title="Forget this file — lets you link a different one instead">&times;</button>
+        </div>
       `;
       document.getElementById("btn-reconnect-file").addEventListener("click", reconnectFile);
+      document.getElementById("btn-unlink-file").addEventListener("click", unlinkFile);
     } else if (fileStatus === "error") {
       el.innerHTML = `
         <div class="file-sync-badge" title="Last write failed — check the file still exists">
