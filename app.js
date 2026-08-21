@@ -223,28 +223,50 @@
       });
 
       // Linking is a write-only connection from here on — it overwrites the picked file on
-      // every change from now on. If that file already has real tracker data in it (an old
-      // save, a different device's export, ...), silently overwriting it with whatever's
-      // currently in THIS browser would be a good way to lose it. Ask first.
+      // every change from now on. If that file already has something in it (an old save, a
+      // different device's export, ...), silently overwriting it with whatever's currently in
+      // THIS browser would be a good way to lose it. Ask first — and if we can't even tell
+      // what's in the file (permission hiccup, etc.), abort instead of guessing: a failed
+      // link with an error toast is a much safer failure mode than a silent overwrite.
+      let existingFile;
       try {
-        const existingFile = await handle.getFile();
-        if (existingFile.size > 0) {
-          const parsed = JSON.parse(await existingFile.text());
-          if (parsed && (parsed.sets || parsed.accessories)) {
-            const useExisting = confirm(
-              "That file already has enhancement tracker data in it.\n\n" +
-              "OK — load that file's data into this tracker (use it as your save).\n" +
-              "Cancel — keep what's currently shown here, and overwrite the file with it instead."
-            );
-            if (useExisting) {
-              state = normalizeState(parsed);
-              save();
-              render();
-            }
+        existingFile = await handle.getFile();
+      } catch (e) {
+        showToast("Couldn't read the selected file — link canceled");
+        return;
+      }
+
+      if (existingFile.size > 0) {
+        let parsed = null;
+        try {
+          parsed = JSON.parse(await existingFile.text());
+        } catch (e) {
+          // Not valid JSON — still not empty, so still worth confirming below.
+        }
+        const looksLikeTrackerData = parsed && (parsed.sets || parsed.accessories);
+
+        if (looksLikeTrackerData) {
+          const useExisting = confirm(
+            "That file already has enhancement tracker data in it.\n\n" +
+            "OK — load that file's data into this tracker (use it as your save).\n" +
+            "Cancel — keep what's currently shown here, and overwrite the file with it instead."
+          );
+          if (useExisting) {
+            state = normalizeState(parsed);
+            save();
+            render();
+          }
+        } else {
+          const overwriteAnyway = confirm(
+            "That file already has content in it that doesn't look like tracker data.\n\n" +
+            "OK — overwrite it with this tracker's current data.\n" +
+            "Cancel — leave the file alone and cancel linking."
+          );
+          if (!overwriteAnyway) {
+            showToast("Link canceled");
+            return;
           }
         }
-      } catch (e) {
-        // Not readable / not valid JSON — nothing to protect, fall through and link as normal.
       }
 
       fileHandle = handle;
