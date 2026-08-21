@@ -221,6 +221,32 @@
         suggestedName: "enhancement-tracker.json",
         types: [{ description: "JSON", accept: { "application/json": [".json"] } }]
       });
+
+      // Linking is a write-only connection from here on — it overwrites the picked file on
+      // every change from now on. If that file already has real tracker data in it (an old
+      // save, a different device's export, ...), silently overwriting it with whatever's
+      // currently in THIS browser would be a good way to lose it. Ask first.
+      try {
+        const existingFile = await handle.getFile();
+        if (existingFile.size > 0) {
+          const parsed = JSON.parse(await existingFile.text());
+          if (parsed && (parsed.sets || parsed.accessories)) {
+            const useExisting = confirm(
+              "That file already has enhancement tracker data in it.\n\n" +
+              "OK — load that file's data into this tracker (use it as your save).\n" +
+              "Cancel — keep what's currently shown here, and overwrite the file with it instead."
+            );
+            if (useExisting) {
+              state = normalizeState(parsed);
+              save();
+              render();
+            }
+          }
+        }
+      } catch (e) {
+        // Not readable / not valid JSON — nothing to protect, fall through and link as normal.
+      }
+
       fileHandle = handle;
       pendingHandle = null;
       await idbSet(IDB_KEY, handle);
