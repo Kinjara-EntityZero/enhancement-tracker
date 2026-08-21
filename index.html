@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enhancement Tracker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <h1>Enhancement Tracker</h1>
+      <p class="subtitle">Black Desert Online &mdash; Enhancement Log</p>
+    </div>
+    <div class="toolbar">
+      <div id="file-sync" class="file-sync"></div>
+      <button id="btn-export" class="btn btn-ghost" title="Download a one-off backup of all your data">Export</button>
+      <button id="btn-import" class="btn btn-ghost" title="Restore data from a backup file">Import</button>
+      <input type="file" id="file-import" accept="application/json" hidden>
+      <button id="btn-reset-all" class="btn btn-ghost btn-danger" title="Erase all accessories and history">Reset All</button>
+    </div>
+  </header>
+
+  <nav class="set-tabs" id="set-tabs"></nav>
+
+  <section class="accessory-grid" id="accessory-grid"></section>
+
+  <section class="detail-panel" id="detail-panel"></section>
+
+  <section class="overall-panel" id="overall-panel"></section>
+
+  <section class="overview-panel" id="overview-panel"></section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="shared.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

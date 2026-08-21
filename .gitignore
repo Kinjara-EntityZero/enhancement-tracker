@@ -1,0 +1,8 @@
+enhancement-tracker.json
+*.bak
+Thumbs.db
+.DS_Store
+
+# Game icon art (sourced from BDO/bdocodex) — not redistributed publicly.
+# Copy this folder over manually on any other machine you use this on.
+Images/

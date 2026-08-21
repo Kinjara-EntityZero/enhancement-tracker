@@ -1,0 +1,1101 @@
+:root {
+  --bg: #0d0a12;
+  --bg-2: #131019;
+  --bg-tint: #1c1526;
+  --icon-tint: #2b2237;
+  --panel: #1a1522;
+  --panel-2: #221b2c;
+  --panel-3: #2a2235;
+  --border: #382c47;
+  --border-soft: #2a2235;
+  --accent: #a875e0;
+  --accent-dim: #7c4dbd;
+  --accent-glow: rgba(168, 117, 224, 0.35);
+  --gold: #d4af6a;
+  --gold-dim: #a5834f;
+  --success: #4caf7d;
+  --success-dim: #2f5f47;
+  --fail: #e0645f;
+  --fail-dim: #6b3230;
+  --text: #ece6f2;
+  --text-dim: #a898b8;
+  --text-faint: #756a86;
+  --radius: 10px;
+  font-size: 16px;
+}
+
+/* Per-set color themes, applied via body[data-theme] (set in app.js from the active
+   set's `theme` field). "purple" is the default (:root above); add a new block here
+   whenever a future set introduces a new `theme` name. */
+body[data-theme="red"] {
+  --bg-tint: #241214;
+  --icon-tint: #3a1c1e;
+  --border: #4a2226;
+  --border-soft: #33191c;
+  --accent: #e2554f;
+  --accent-dim: #a8332e;
+  --accent-glow: rgba(226, 85, 79, 0.38);
+  --gold: #e0a35a;
+  --gold-dim: #a8703a;
+}
+
+body[data-theme="gold"] {
+  --bg-tint: #241c0e;
+  --icon-tint: #3a2e14;
+  --border: #4a3d1e;
+  --border-soft: #332a17;
+  --accent: #d9a521;
+  --accent-dim: #a87b1a;
+  --accent-glow: rgba(217, 165, 33, 0.4);
+  --gold: #f0d878;
+  --gold-dim: #b89b4a;
+}
+
+body[data-theme="emerald"] {
+  --bg-tint: #0e1f1a;
+  --icon-tint: #16332a;
+  --border: #2a453c;
+  --border-soft: #1f332c;
+  --accent: #2fb894;
+  --accent-dim: #1f7d64;
+  --accent-glow: rgba(47, 184, 148, 0.4);
+  --gold: #bfe6a0;
+  --gold-dim: #8bab72;
+}
+
+body[data-theme="crimson"] {
+  --bg-tint: #1f0f16;
+  --icon-tint: #331823;
+  --border: #4a1f2e;
+  --border-soft: #331722;
+  --accent: #c23b5c;
+  --accent-dim: #8f2a44;
+  --accent-glow: rgba(194, 59, 92, 0.4);
+  --gold: #d98aa0;
+  --gold-dim: #a5687a;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: radial-gradient(circle at 50% -10%, var(--bg-tint) 0%, var(--bg) 55%);
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", "Inter", Roboto, sans-serif;
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 24px 80px;
+}
+
+/* ---------- Top bar ---------- */
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 18px;
+}
+
+.brand h1 {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.7rem;
+  letter-spacing: 0.03em;
+  margin: 0 0 4px;
+  background: linear-gradient(135deg, var(--gold) 0%, var(--accent) 70%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.file-sync {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-sync-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  padding: 6px 12px;
+  border-radius: 7px;
+  max-width: 220px;
+}
+
+.file-sync-badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.file-sync-badge .dot.synced { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.file-sync-badge .dot.pending { background: var(--gold); }
+.file-sync-badge .dot.error { background: var(--fail); }
+
+.file-sync-badge .fname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-sync-badge button {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.file-sync-badge button:hover { color: var(--fail); }
+
+.btn {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 8px 14px;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+
+.btn:hover { border-color: var(--accent-dim); color: var(--text); }
+
+.btn-ghost { background: transparent; }
+
+.btn-danger:hover { border-color: var(--fail); color: var(--fail); }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-dim), var(--accent));
+  border: 1px solid var(--accent);
+  color: #17101f;
+  font-weight: 600;
+}
+.btn-primary:hover { filter: brightness(1.1); }
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: none !important;
+}
+
+/* ---------- Set tabs ---------- */
+
+.set-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.set-tab {
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  color: var(--tab-dim, var(--text-dim));
+  padding: 9px 22px;
+  border-radius: 8px 8px 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: Georgia, serif;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+
+/* Per-theme colors for tabs that AREN'T currently active, so each tab hints at its own
+   set's palette even before you click it. Keep these dim/full pairs in sync with the
+   body[data-theme] blocks above. */
+.set-tab[data-theme="purple"]  { --tab-dim: #6a5286; --tab-full: #a875e0; }
+.set-tab[data-theme="red"]     { --tab-dim: #8a4744; --tab-full: #e2554f; }
+.set-tab[data-theme="gold"]    { --tab-dim: #8a6c26; --tab-full: #d9a521; }
+.set-tab[data-theme="crimson"] { --tab-dim: #7a3548; --tab-full: #c23b5c; }
+.set-tab[data-theme="emerald"] { --tab-dim: #2c6653; --tab-full: #2fb894; }
+
+.set-tab:hover {
+  color: var(--tab-full, var(--text));
+}
+
+.set-tab.active {
+  color: var(--gold);
+  border-bottom: 2px solid var(--tab-full, var(--accent));
+  background: var(--panel-2);
+}
+
+/* ---------- Accessory grid ---------- */
+
+.accessory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 14px;
+  margin-bottom: 26px;
+}
+
+.acc-card {
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  transition: border-color .15s, transform .1s, box-shadow .15s;
+  position: relative;
+}
+
+.acc-card:hover { border-color: var(--accent-dim); transform: translateY(-1px); }
+
+.acc-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 18px var(--accent-glow);
+}
+
+/* A class-overridden piece with real art but no enhancement tracking (e.g. Shai's fixed-PEN
+   "awakening" slot) — looks normal, just not interactive. */
+.acc-card.locked {
+  cursor: default;
+}
+.acc-card.locked:hover {
+  border-color: var(--border-soft);
+  transform: none;
+}
+
+/* A classVariant piece with no image for the selected class — muted with a "Not Available"
+   badge in place of the level, distinct from .locked since there's nothing to show yet. */
+.acc-card.unavailable {
+  cursor: default;
+  opacity: 0.55;
+}
+.acc-card.unavailable:hover {
+  border-color: var(--border-soft);
+  transform: none;
+}
+
+.unavailable-overlay {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 2px 10px;
+  border-radius: 20px;
+  background: var(--panel-3);
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  text-transform: uppercase;
+}
+
+.acc-icon-wrap {
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  background: radial-gradient(circle at 50% 35%, var(--icon-tint) 0%, #17111f 75%);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.acc-icon-wrap img {
+  width: 40px;
+  height: 40px;
+  image-rendering: -webkit-optimize-contrast;
+}
+
+/* Roman-numeral badge painted over an icon (Pri->I ... Dec->X). Centered both directions,
+   white fill with a 2px black outline via text-stroke (paint-order keeps the stroke from
+   eating into the fill). Sized relative to its icon-wrap so it scales with the bigger
+   detail-header icon automatically. */
+.roman-numeral {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Georgia, serif;
+  font-weight: 700;
+  font-size: 1.3rem;
+  color: #fff;
+  -webkit-text-stroke: 4px #000;
+  paint-order: stroke fill;
+  pointer-events: none;
+}
+
+.detail-icon-wrap .roman-numeral {
+  font-size: 1.7rem;
+}
+
+.acc-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.acc-level-badge {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  padding: 2px 10px;
+  border-radius: 20px;
+  background: var(--panel-3);
+  color: var(--gold);
+  border: 1px solid var(--border);
+  text-transform: uppercase;
+}
+
+.acc-level-badge.maxed {
+  background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+  color: #17101f;
+  border-color: var(--gold);
+}
+
+.acc-mini-pity {
+  width: 100%;
+  height: 4px;
+  background: var(--panel-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.acc-mini-pity > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+}
+.acc-mini-pity.ready > div { background: linear-gradient(90deg, var(--gold-dim), var(--gold)); }
+
+/* ---------- Detail panel ---------- */
+
+.detail-panel {
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 24px;
+  min-height: 200px;
+}
+
+.empty-state {
+  color: var(--text-faint);
+  text-align: center;
+  padding: 40px 0;
+  font-size: 0.95rem;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.detail-icon-wrap {
+  width: 76px;
+  height: 76px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 35%, var(--icon-tint) 0%, #17111f 75%);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+.detail-icon-wrap img { width: 52px; height: 52px; }
+
+.detail-title-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 180px;
+}
+
+.name-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.acc-name-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: var(--text);
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-family: Georgia, serif;
+  padding: 2px 0;
+  min-width: 120px;
+}
+.acc-name-input:hover, .acc-name-input:focus {
+  border-bottom: 1px solid var(--border);
+  outline: none;
+}
+
+.type-tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.level-big-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.level-big-badge {
+  font-family: Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--gold);
+  border: 1px solid var(--gold-dim);
+  padding: 3px 16px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  letter-spacing: 0.05em;
+}
+
+.level-arrow { color: var(--text-faint); font-size: 1.1rem; }
+
+.level-target-badge {
+  font-family: Georgia, serif;
+  font-size: 1.1rem;
+  color: var(--accent);
+  border: 1px dashed var(--accent-dim);
+  padding: 3px 14px;
+  border-radius: 8px;
+}
+
+.maxed-banner {
+  background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+  color: #17101f;
+  font-weight: 700;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-family: Georgia, serif;
+}
+
+/* ---------- Action / pity section ---------- */
+
+.action-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 720px) {
+  .action-section { grid-template-columns: 1fr; }
+}
+
+.action-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* When there's no class picker stacked below it, "Manually Set Level / Pity" is the only
+   box in this column — stretch it to match the paired box's height instead of leaving it
+   short with empty space below (only-child, so this doesn't affect the 2-box case). */
+.action-col .card-block:only-child {
+  flex: 1;
+}
+
+.card-block {
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.class-picker-status {
+  font-size: 0.82rem;
+  color: var(--text-faint);
+}
+.class-picker-status code {
+  color: var(--text-dim);
+}
+
+.card-block h3 {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.pity-track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.pity-bar {
+  flex: 1;
+  height: 10px;
+  background: var(--panel-3);
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.pity-bar > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+  transition: width .2s;
+}
+.pity-bar.ready > div {
+  background: linear-gradient(90deg, var(--gold-dim), var(--gold));
+}
+
+.pity-count {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pity-ready-text {
+  color: var(--gold);
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.log-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-log {
+  flex: 1;
+  padding: 12px 10px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid;
+  transition: filter .15s, transform .1s;
+}
+.btn-log:hover { filter: brightness(1.15); }
+.btn-log:active { transform: scale(0.98); }
+
+.btn-success {
+  background: linear-gradient(135deg, var(--success-dim), var(--success));
+  border-color: var(--success);
+  color: #0e1f16;
+}
+.btn-fail {
+  background: linear-gradient(135deg, var(--fail-dim), var(--fail));
+  border-color: var(--fail);
+  color: #240a09;
+}
+
+.undo-row {
+  margin-top: 10px;
+  text-align: right;
+}
+.undo-row.centered {
+  text-align: center;
+}
+.undo-row button {
+  font-size: 0.75rem;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.undo-row button:hover { color: var(--text); }
+
+/* Manual set-level form */
+
+.set-level-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-row label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  width: 90px;
+  flex-shrink: 0;
+}
+
+select, input[type=number] {
+  background: var(--panel-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  flex: 1;
+}
+
+.stats-caption {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-top: 14px;
+}
+
+.stats-row {
+  display: flex;
+  gap: 18px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.stats-row + .stats-caption {
+  margin-top: 14px;
+}
+
+.stats-row.centered {
+  justify-content: center;
+}
+
+/* Replaces the Pity Progress box once an item (or, bigger version, the whole set) hits max
+   level — fills the same grid cell so the paired "Manually Set Level / Pity" box never
+   shrinks or grows depending on maxed state. */
+.maxed-celebration {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 100%;
+}
+
+.maxed-celebration-title {
+  font-family: Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.level-rates-block {
+  margin-bottom: 24px;
+}
+
+.level-rates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.level-rate-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel-3);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-size: 0.83rem;
+}
+
+.level-rate-row.in-progress {
+  border-left: 3px solid var(--accent);
+}
+
+.level-rate-badge {
+  font-weight: 700;
+  color: var(--gold);
+  width: 42px;
+  flex-shrink: 0;
+}
+
+.level-rate-stats {
+  flex: 1;
+  display: flex;
+  gap: 14px;
+  color: var(--text-dim);
+}
+
+.level-rate-tag {
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+
+.level-rate-pct {
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+}
+.stat .val {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.stat .lbl {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+/* ---------- History ---------- */
+
+.history-section h3 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.history-empty {
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  padding: 12px 0;
+}
+
+.hist-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-size: 0.83rem;
+}
+
+.hist-row.result-fail { border-left: 3px solid var(--fail); }
+.hist-row.result-success { border-left: 3px solid var(--success); }
+.hist-row.result-adjust { border-left: 3px solid var(--text-faint); opacity: 0.8; }
+
+.hist-badge {
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.hist-badge.success { background: var(--success-dim); color: #b9f3d2; }
+.hist-badge.fail { background: var(--fail-dim); color: #ffd3d0; }
+.hist-badge.adjust { background: var(--panel-3); color: var(--text-dim); }
+
+.hist-desc { flex: 1; color: var(--text-dim); }
+.hist-desc b { color: var(--text); }
+
+.hist-time {
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.hist-del {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0 2px;
+  line-height: 1;
+}
+.hist-del:hover { color: var(--fail); }
+
+/* ---------- Overall history ---------- */
+
+.overall-panel {
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-top: 20px;
+}
+
+.overall-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.overall-header h3 {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.overall-filter {
+  width: auto;
+  min-width: 170px;
+  flex: none;
+}
+
+.hist-acc-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 108px;
+  flex-shrink: 0;
+}
+
+.hist-acc-tag img {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--panel-3);
+  border: 1px solid var(--border);
+  padding: 2px;
+}
+
+.hist-acc-tag span {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overall-panel .hist-row {
+  cursor: pointer;
+}
+.overall-panel .hist-row:hover {
+  border-color: var(--accent-dim);
+}
+
+/* ---------- Toast ---------- */
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--panel-3);
+  border: 1px solid var(--accent-dim);
+  color: var(--text);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s, transform .2s;
+  z-index: 50;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Scrollbar */
+.history-list::-webkit-scrollbar { width: 7px; }
+.history-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.history-list::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- Overview tab (all-sets dashboard) ---------- */
+
+.overview-tab {
+  color: var(--gold);
+  border-right: 1px solid var(--border-soft);
+  margin-right: 4px;
+  padding-right: 22px;
+}
+.overview-tab:hover { color: var(--gold); filter: brightness(1.2); }
+.overview-tab.active {
+  border-bottom: 2px solid var(--gold);
+  background: var(--panel-2);
+}
+
+.overview-panel {
+  display: none;
+}
+
+.overview-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.overview-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  border-top: 3px solid var(--card-accent, var(--accent));
+  border-radius: var(--radius);
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color .15s, transform .1s;
+}
+.overview-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--card-accent, var(--accent));
+}
+
+.overview-card[data-theme="purple"]  { --card-accent: #a875e0; }
+.overview-card[data-theme="red"]     { --card-accent: #e2554f; }
+.overview-card[data-theme="gold"]    { --card-accent: #d9a521; }
+.overview-card[data-theme="crimson"] { --card-accent: #c23b5c; }
+.overview-card[data-theme="emerald"] { --card-accent: #2fb894; }
+
+.overview-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.overview-card-icon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 35%, var(--icon-tint) 0%, #17111f 75%);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.overview-card-icon img { width: 30px; height: 30px; }
+
+.overview-card-title {
+  font-family: Georgia, serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+.overview-card-sub {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.overview-progress-bar {
+  height: 7px;
+  background: var(--panel-3);
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.overview-progress-bar > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--card-accent, var(--accent-dim)), var(--card-accent, var(--accent)));
+}
+
+.overview-stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.overview-streak-flag {
+  margin-top: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--fail);
+}
+
+.overview-feed .feed-set-tag {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 20px;
+  color: var(--card-accent, var(--accent));
+  border: 1px solid var(--card-accent, var(--accent-dim));
+  white-space: nowrap;
+}
+.overview-feed .feed-set-tag[data-theme="purple"]  { --card-accent: #a875e0; }
+.overview-feed .feed-set-tag[data-theme="red"]     { --card-accent: #e2554f; }
+.overview-feed .feed-set-tag[data-theme="gold"]    { --card-accent: #d9a521; }
+.overview-feed .feed-set-tag[data-theme="crimson"] { --card-accent: #c23b5c; }
+.overview-feed .feed-set-tag[data-theme="emerald"] { --card-accent: #2fb894; }
+
+.overview-feed .hist-row { cursor: pointer; }
+.overview-feed .hist-row:hover { border-color: var(--accent-dim); }
+
+/* ---------- Fail-streak indicator (detail panel) ---------- */
+
+.streak-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.streak-row.centered { justify-content: center; }
+
+.streak-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--panel-3);
+  border: 1px solid var(--border-soft);
+  border-radius: 20px;
+  padding: 3px 10px;
+}
+.streak-pill.active {
+  color: var(--fail);
+  border-color: var(--fail-dim);
+}
+
+/* ---------- Share card button ---------- */
+
+.btn-share {
+  align-self: flex-start;
+  margin-left: auto;
+}

@@ -1,0 +1,308 @@
+:root {
+  --panel-rgb: 17, 13, 23;
+  --panel-alpha: 1;
+  --panel: rgba(var(--panel-rgb), var(--panel-alpha));
+  --panel-2: rgb(34, 27, 44);
+  --icon-tint-rgb: 60, 46, 78;
+  --border: rgba(186, 145, 230, 0.6);
+  --accent: #b98af0;
+  --accent-dim: #7c4dbd;
+  --accent-rgb: 185, 138, 240;
+  --gold: #e0c088;
+  --gold-dim: #a5834f;
+  --success: #5fd79a;
+  --fail: #f0827d;
+  --text: #f2ecf7;
+  --text-dim: #c3b6d1;
+  --text-faint: #8d7f9d;
+}
+
+/* Per-set color themes, applied via body[data-theme] (set in overlay.js from the active
+   set's `theme` field). "purple" is the default (:root above); add a new block here
+   whenever a future set introduces a new `theme` name. Keep in sync with style.css. */
+body[data-theme="red"] {
+  --icon-tint-rgb: 88, 32, 34;
+  --border: rgba(224, 100, 94, 0.55);
+  --accent: #e2554f;
+  --accent-dim: #a8332e;
+  --accent-rgb: 226, 85, 79;
+  --gold: #e0a35a;
+  --gold-dim: #a8703a;
+}
+
+body[data-theme="gold"] {
+  --icon-tint-rgb: 74, 58, 28;
+  --border: rgba(217, 165, 33, 0.55);
+  --accent: #d9a521;
+  --accent-dim: #a87b1a;
+  --accent-rgb: 217, 165, 33;
+  --gold: #f0d878;
+  --gold-dim: #b89b4a;
+}
+
+body[data-theme="crimson"] {
+  --icon-tint-rgb: 51, 24, 35;
+  --border: rgba(194, 59, 92, 0.55);
+  --accent: #c23b5c;
+  --accent-dim: #8f2a44;
+  --accent-rgb: 194, 59, 92;
+  --gold: #d98aa0;
+  --gold-dim: #a5687a;
+}
+
+body[data-theme="emerald"] {
+  --icon-tint-rgb: 22, 51, 42;
+  --border: rgba(47, 184, 148, 0.5);
+  --accent: #2fb894;
+  --accent-dim: #1f7d64;
+  --accent-rgb: 47, 184, 148;
+  --gold: #bfe6a0;
+  --gold-dim: #8bab72;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-family: -apple-system, "Segoe UI", "Inter", Roboto, sans-serif;
+  color: var(--text);
+  overflow: hidden;
+}
+
+.overlay-root {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+}
+
+.overlay-empty {
+  font-size: 0.9rem;
+  color: var(--text-faint);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+}
+
+.ov-card {
+  width: 208px;
+  background: var(--panel);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.ov-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ov-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 35%, rgb(var(--icon-tint-rgb)) 0%, rgb(15, 11, 20) 75%);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+.ov-icon-wrap img {
+  width: 27px;
+  height: 27px;
+}
+
+/* Roman-numeral badge painted over an icon (Pri->I ... Dec->X), matching the main tracker. */
+.roman-numeral {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+  -webkit-text-stroke: 4px #000;
+  paint-order: stroke fill;
+  pointer-events: none;
+}
+
+.ov-name-col {
+  min-width: 0;
+  flex: 1;
+}
+
+.ov-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.ov-level-row {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.ov-level {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--gold);
+  letter-spacing: 0.03em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.ov-level.maxed { color: var(--gold); }
+
+.ov-arrow-target {
+  font-size: 0.68rem;
+  color: var(--text-faint);
+}
+
+/* A classVariant piece with no image for the selected class — muted, no icon/pity, just a label. */
+.ov-card.ov-unavailable {
+  opacity: 0.55;
+}
+
+.ov-unavailable-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+.ov-pity-track {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+
+.ov-pity-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ov-pity-bar > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+}
+.ov-pity-bar.ready > div {
+  background: linear-gradient(90deg, var(--gold-dim), var(--gold));
+}
+.ov-pity-bar.maxed > div {
+  background: linear-gradient(90deg, var(--gold-dim), var(--gold));
+}
+
+.ov-pity-num {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-maxed-banner {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 9px;
+}
+
+.ov-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 8px;
+}
+
+.ov-stat {
+  text-align: center;
+}
+.ov-stat .v {
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ov-stat .l {
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+.ov-stat.successes .v { color: var(--success); }
+.ov-stat.fails .v { color: var(--fail); }
+.ov-stat.rate .v { color: var(--success); }
+
+.ov-level-rates {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ov-lvl-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ov-lvl-row.in-progress {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.ov-lvl-row .lvl {
+  font-weight: 700;
+  color: var(--gold);
+  width: 30px;
+  flex-shrink: 0;
+}
+
+.ov-lvl-row .cnt {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+}
+.ov-lvl-row .cnt .s { color: var(--success); }
+.ov-lvl-row .cnt .f { color: var(--fail); }
+
+.ov-lvl-row .pct {
+  font-weight: 700;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-debug {
+  position: fixed;
+  bottom: 6px;
+  right: 8px;
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
