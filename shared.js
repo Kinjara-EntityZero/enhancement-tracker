@@ -341,8 +341,10 @@
       }
     });
 
-    // "overview" is a special pseudo-tab (all-sets dashboard), not a real set in SETS.
-    if (!raw.activeSet || (!SETS[raw.activeSet] && raw.activeSet !== "overview")) raw.activeSet = "ekleta";
+    // "overview" and "overlays" are special pseudo-tabs (all-sets dashboard, OBS overlay
+    // downloads), not real sets in SETS.
+    const PSEUDO_TABS = ["overview", "overlays"];
+    if (!raw.activeSet || (!SETS[raw.activeSet] && !PSEUDO_TABS.includes(raw.activeSet))) raw.activeSet = "ekleta";
     return raw;
   }
 

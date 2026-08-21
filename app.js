@@ -406,12 +406,17 @@
   function render() {
     renderTabs();
     const overview = state.activeSet === "overview";
-    document.getElementById("accessory-grid").style.display = overview ? "none" : "";
-    document.getElementById("detail-panel").style.display = overview ? "none" : "";
-    document.getElementById("overall-panel").style.display = overview ? "none" : "";
+    const overlays = state.activeSet === "overlays";
+    const normal = !overview && !overlays;
+    document.getElementById("accessory-grid").style.display = normal ? "" : "none";
+    document.getElementById("detail-panel").style.display = normal ? "" : "none";
+    document.getElementById("overall-panel").style.display = normal ? "" : "none";
     document.getElementById("overview-panel").style.display = overview ? "block" : "none";
+    document.getElementById("overlays-panel").style.display = overlays ? "block" : "none";
     if (overview) {
       renderOverviewPanel();
+    } else if (overlays) {
+      renderOverlaysPanel();
     } else {
       renderGrid();
       renderDetail();
@@ -447,16 +452,17 @@
   }
 
   function renderTabs() {
-    const overview = state.activeSet === "overview";
-    document.body.dataset.theme = overview ? "" : activeSetDef().theme || "";
+    const isPseudoTab = state.activeSet === "overview" || state.activeSet === "overlays";
+    document.body.dataset.theme = isPseudoTab ? "" : activeSetDef().theme || "";
 
     const el = document.getElementById("set-tabs");
-    const overviewBtn = `<button class="set-tab overview-tab${overview ? " active" : ""}" data-set="overview">&#9733; Overview</button>`;
+    const overviewBtn = `<button class="set-tab overview-tab${state.activeSet === "overview" ? " active" : ""}" data-set="overview">&#9733; Overview</button>`;
+    const overlaysBtn = `<button class="set-tab overview-tab${state.activeSet === "overlays" ? " active" : ""}" data-set="overlays">&#8862; Overlays</button>`;
     const setBtns = SET_ORDER.map((key) => {
       const def = SETS[key];
       return `<button class="set-tab${key === state.activeSet ? " active" : ""}" data-set="${key}" data-theme="${def.theme || ""}">${def.label}</button>`;
     }).join("");
-    el.innerHTML = overviewBtn + setBtns;
+    el.innerHTML = overviewBtn + overlaysBtn + setBtns;
     el.querySelectorAll(".set-tab").forEach((btn) => {
       btn.addEventListener("click", () => {
         if (btn.dataset.set === state.activeSet) return;
@@ -467,8 +473,8 @@
     });
 
     const resetBtn = document.getElementById("btn-reset-all");
-    resetBtn.style.display = overview ? "none" : "";
-    if (!overview) {
+    resetBtn.style.display = isPseudoTab ? "none" : "";
+    if (!isPseudoTab) {
       resetBtn.textContent = `Reset ${activeSetDef().label}`;
       resetBtn.title = `Erase all ${activeSetDef().label} ${categoryLabel(activeSetDef())} and history (the other sets are untouched)`;
     }
@@ -937,6 +943,60 @@
         document.getElementById("detail-panel").scrollIntoView({ behavior: "smooth", block: "start" });
       });
     });
+  }
+
+  // ---------- Overlays tab (OBS Browser Source downloads) ----------
+
+  const OVERLAY_BLURBS = {
+    ekleta: "One card per Ekleta piece (2 rings, 2 earrings, belt, neck) — current level, pity progress, and rates.",
+    apeiron: "Same layout as Ekleta, for your Apeiron accessory set.",
+    edana: "One card per Edana armor piece (Heavensmite, Abyssveil, Oathgrip, Furystride).",
+    sovereign: "One card per weapon slot (main hand, awakening, offhand), showing whichever class you have selected.",
+    alchemy: "One card per alchemy stone (Destruction, Life, Protection) — its icon changes as it enhances.",
+  };
+
+  function renderOverlaysPanel() {
+    const panel = document.getElementById("overlays-panel");
+
+    const cardsHtml = SET_ORDER.map((key) => {
+      const def = SETS[key];
+      return `
+        <div class="overlay-card" data-theme="${def.theme || ""}">
+          <div class="overlay-card-head">
+            <div class="overlay-card-title">${def.label}</div>
+            <a class="overlay-live-link" href="overlay-${key}.html" target="_blank" rel="noopener">Open live &#8599;</a>
+          </div>
+          <div class="overlay-preview-frame">
+            <img src="overlay-previews/${key}.png" alt="${def.label} overlay example" loading="lazy">
+          </div>
+          <div class="overlay-card-blurb">${OVERLAY_BLURBS[key] || ""}</div>
+          <a class="btn btn-primary overlay-download-btn" href="downloads/overlay-${key}.zip" download>Download ${def.label} Overlay</a>
+        </div>
+      `;
+    }).join("");
+
+    panel.innerHTML = `
+      <div class="overlay-intro card-block">
+        <h3>Using these in OBS</h3>
+        <p>Each overlay below is a small standalone webpage meant for OBS Studio's <b>Browser Source</b> (or any
+        browser) — a read-only, live view of one gear set's progress, styled to match that set's theme.</p>
+        <ol class="overlay-steps">
+          <li>Download the set you want below and unzip it anywhere on your PC.</li>
+          <li>Put a copy of your <code>enhancement-tracker.json</code> save file in that same folder. If you use
+          this tracker's <b>Link Save File</b> feature, point it at that folder so the file stays updated
+          automatically — otherwise, re-use <b>Export</b> whenever you want the overlay to catch up.</li>
+          <li>In OBS: <b>Add Source &rarr; Browser &rarr; Local File</b>, and select the overlay's <code>.html</code> file.</li>
+        </ol>
+        <p class="overlay-note">The overlay re-reads that JSON file every few seconds on its own — no manual
+        refresh needed, and nothing is ever uploaded anywhere. It only reads local data; it never writes to it.</p>
+        <p class="overlay-note">Optional URL parameters (append to the file path in OBS, e.g.
+        <code>overlay-ekleta.html?interval=2000&amp;bg=0.85</code>): <code>interval</code> (poll rate in ms, default
+        3000), <code>bg</code> (panel opacity 0&ndash;1), <code>items</code> (comma-separated piece ids to show only
+        some cards), <code>stats=0</code> / <code>levels=0</code> (hide the stats row / per-level breakdown),
+        <code>file</code> (a different JSON filename/path than the default).</p>
+      </div>
+      <div class="overlay-cards">${cardsHtml}</div>
+    `;
   }
 
   // ---------- Shareable summary card (Canvas -> PNG download) ----------
