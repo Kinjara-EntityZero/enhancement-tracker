@@ -296,6 +296,16 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+.ov-preview-badge {
+  flex: 0 0 100%;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
 .ov-debug {
   position: fixed;
   bottom: 6px;

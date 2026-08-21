@@ -964,7 +964,7 @@
         <div class="overlay-card" data-theme="${def.theme || ""}">
           <div class="overlay-card-head">
             <div class="overlay-card-title">${def.label}</div>
-            <a class="overlay-live-link" href="overlay-${key}.html" target="_blank" rel="noopener">Open live &#8599;</a>
+            <a class="overlay-live-link" href="overlay-${key}.html" target="_blank" rel="noopener" title="Opens the real overlay page. It has no local save file to read here, so it falls back to previewing your current browser data for this tracker.">Preview &#8599;</a>
           </div>
           <div class="overlay-preview-frame">
             <img src="overlay-previews/${key}.png" alt="${def.label} overlay example" loading="lazy">
@@ -989,6 +989,11 @@
         </ol>
         <p class="overlay-note">The overlay re-reads that JSON file every few seconds on its own — no manual
         refresh needed, and nothing is ever uploaded anywhere. It only reads local data; it never writes to it.</p>
+        <p class="overlay-note">Each card's <b>Preview</b> link opens the real overlay page right here in your
+        browser. Since there's no save file for it to find on this site, it automatically falls back to showing
+        your current browser data for this tracker instead — handy for seeing the layout before you ever touch
+        OBS. Once it's actually reading a real linked/exported file (locally, next to your downloaded copy), it
+        uses that instead.</p>
         <p class="overlay-note">Optional URL parameters (append to the file path in OBS, e.g.
         <code>overlay-ekleta.html?interval=2000&amp;bg=0.85</code>): <code>interval</code> (poll rate in ms, default
         3000), <code>bg</code> (panel opacity 0&ndash;1), <code>items</code> (comma-separated piece ids to show only

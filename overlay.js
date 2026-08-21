@@ -23,9 +23,16 @@
     document.documentElement.style.setProperty("--panel-alpha", Math.min(1, Math.max(0, bgParam)));
   }
 
+  // Matches app.js's STORAGE_KEY — index.html and overlay-*.html share localStorage on the
+  // same origin, so when there's no local JSON file to poll (e.g. this page is running on a
+  // hosted preview rather than sitting next to a real save file), the overlay can still show
+  // something real by reading this browser's own tracker data instead.
+  const STORAGE_KEY = "bdo-enhancement-tracker-v1";
+
   const root = document.getElementById("overlay-root");
   let lastLoadedAt = null;
   let hasLoadedOnce = false;
+  let usingLocalStorageFallback = false;
   let debugEl = null;
 
   // For classVariant sets (Sovereign weapons), resolve icons once — cached across polls.
@@ -167,7 +174,10 @@
       .map((acc) => renderCard(acc, setState.selectedClass))
       .join("");
 
-    root.innerHTML = cards || `<div class="overlay-empty">No accessory data found.</div>`;
+    const badge = usingLocalStorageFallback
+      ? `<div class="ov-preview-badge">&#9432; Browser preview &mdash; showing this browser's saved tracker data, not a linked file</div>`
+      : "";
+    root.innerHTML = badge + (cards || `<div class="overlay-empty">No accessory data found.</div>`);
   }
 
   function updateDebug(status) {
@@ -184,9 +194,17 @@
       if (levelVariantPromise && !levelVariantResult) {
         levelVariantResult = await levelVariantPromise;
       }
-      const res = await fetch(FILE + "?t=" + Date.now(), { cache: "no-store" });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
+      let data, viaFallback = false;
+      try {
+        const res = await fetch(FILE + "?t=" + Date.now(), { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        data = await res.json();
+      } catch (fetchErr) {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) throw fetchErr;
+        data = JSON.parse(raw);
+        viaFallback = true;
+      }
       if (!data) throw new Error("malformed data");
       // Pre-Apeiron files were a flat { accessories, selectedId } shape, implicitly Ekleta.
       const sets = data.sets || (data.accessories ? { ekleta: data } : null);
@@ -194,8 +212,9 @@
       if (!setState || !setState.accessories) throw new Error("no data for set '" + SET_KEY + "'");
       lastLoadedAt = Date.now();
       hasLoadedOnce = true;
+      usingLocalStorageFallback = viaFallback;
       render(setState);
-      updateDebug("ok");
+      updateDebug(viaFallback ? "ok (browser preview)" : "ok");
     } catch (err) {
       if (!hasLoadedOnce) {
         root.innerHTML = `<div class="overlay-empty">Waiting for ${escapeHtml(FILE)} (${escapeHtml(SET_KEY)})&hellip;</div>`;
