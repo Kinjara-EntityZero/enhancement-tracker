@@ -17,6 +17,22 @@
     return numeral ? `<span class="roman-numeral">${numeral}</span>` : "";
   }
 
+  // `log` must be in chronological (oldest-first) order — the same array a pity stack would
+  // have been built from. Used both for a single item's log and for a merged, re-sorted
+  // multi-item timeline (Overall History), where it reads as "how many of the most recent
+  // attempts across everything shown here, in the order they happened, were fails."
+  function streakRowHtml(log, centered) {
+    const cur = currentFailStreak(log);
+    const longest = longestFailStreak(log);
+    if (!longest) return "";
+    return `
+      <div class="streak-row${centered ? " centered" : ""}">
+        ${cur > 0 ? `<span class="streak-pill active">&#128293; Current streak: ${cur} fail${cur === 1 ? "" : "s"}</span>` : ""}
+        <span class="streak-pill">Longest streak: ${longest} fail${longest === 1 ? "" : "s"}</span>
+      </div>
+    `;
+  }
+
   function genId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
@@ -642,18 +658,6 @@
       `;
     }
 
-    function streakRowHtml(log, centered) {
-      const cur = currentFailStreak(log);
-      const longest = longestFailStreak(log);
-      if (!longest) return "";
-      return `
-        <div class="streak-row${centered ? " centered" : ""}">
-          ${cur > 0 ? `<span class="streak-pill active">&#128293; Current streak: ${cur} fail${cur === 1 ? "" : "s"}</span>` : ""}
-          <span class="streak-pill">Longest streak: ${longest} fail${longest === 1 ? "" : "s"}</span>
-        </div>
-      `;
-    }
-
     // The box that pairs with "Manually Set Level / Pity" — normal pity progress, a per-item
     // "maxed" celebration, or (once every piece in the set is done) a set-wide one. Always
     // rendered so the two boxes stay the same height regardless of state.
@@ -857,6 +861,8 @@
     const successes = filtered.filter((e) => e.type === "success").length;
     const fails = filtered.filter((e) => e.type === "fail").length;
     const rate = total ? Math.round((successes / total) * 100) : 0;
+    // filtered is newest-first (for display); streaks need chronological order.
+    const chronological = filtered.slice().reverse();
 
     const rows = filtered.length
       ? filtered.map((e) => {
@@ -887,6 +893,7 @@
         <div class="stat"><div class="val">${fails}</div><div class="lbl">Fails</div></div>
         <div class="stat"><div class="val">${rate}%</div><div class="lbl">Success Rate</div></div>
       </div>
+      ${streakRowHtml(chronological)}
       <div class="history-list">${rows}</div>
     `;
 
