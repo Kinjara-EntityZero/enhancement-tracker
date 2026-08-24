@@ -1115,13 +1115,6 @@ select, input[type=number] {
   border-color: #2c5f82;
 }
 
-.flame-icon {
-  vertical-align: -1px;
-  margin-right: 1px;
-}
-.flame-icon.hot { fill: var(--fail); }
-.flame-icon.cold { fill: #5aa9e6; }
-
 /* ---------- Share card button ---------- */
 
 .btn-share {
