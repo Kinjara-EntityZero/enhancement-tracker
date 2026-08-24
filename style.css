@@ -1111,6 +1111,13 @@ select, input[type=number] {
   border-color: var(--fail-dim);
 }
 
+.flame-icon {
+  vertical-align: -1px;
+  margin-right: 1px;
+}
+.flame-icon.hot { fill: var(--fail); }
+.flame-icon.cold { fill: #5aa9e6; }
+
 /* ---------- Share card button ---------- */
 
 .btn-share {
