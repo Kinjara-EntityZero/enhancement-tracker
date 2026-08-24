@@ -1093,6 +1093,7 @@ select, input[type=number] {
   gap: 10px;
   flex-wrap: wrap;
   margin-top: 10px;
+  margin-bottom: 14px;
 }
 .streak-row.centered { justify-content: center; }
 
