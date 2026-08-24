@@ -1106,9 +1106,13 @@ select, input[type=number] {
   border-radius: 20px;
   padding: 3px 10px;
 }
-.streak-pill.active {
+.streak-pill.hot {
   color: var(--fail);
   border-color: var(--fail-dim);
+}
+.streak-pill.cold {
+  color: #5aa9e6;
+  border-color: #2c5f82;
 }
 
 .flame-icon {

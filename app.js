@@ -6,7 +6,7 @@
   const {
     SETS, SET_ORDER,
     nextLevel, isMaxed, freshSetState,
-    computeStats, currentFailStreak, longestFailStreak, levelBreakdown, normalizeState,
+    computeStats, currentFailStreak, longestFailStreak, currentStreak, longestStreak, levelBreakdown, normalizeState,
     detectClassVariants, getPieceOverride, detectLevelVariants, romanNumeralFor
   } = window.EnhancementShared;
 
@@ -21,21 +21,30 @@
   // have been built from. Used both for a single item's log and for a merged, re-sorted
   // multi-item timeline (Overall History), where it reads as "how many of the most recent
   // attempts across everything shown here, in the order they happened, were fails."
-  // A hot (orange) flame for the live/ongoing streak, a cold (blue) one for the longest-ever
-  // record — an SVG rather than a second emoji so the color is actually reliable cross-browser.
+  // Hot (red) for a run of successes, cold (blue) for a run of fails — an SVG rather than an
+  // emoji so the color is actually reliable cross-browser.
   const FLAME_PATH = "M12 2c1 3-3 4-3 8a3 3 0 0 0 6 0c0-1-1-2-1-3 2 1 4 4 4 7a6 6 0 0 1-12 0c0-5 3-6 6-12z";
   function flameIcon(variant) {
     return `<svg class="flame-icon ${variant}" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="${FLAME_PATH}"/></svg>`;
   }
 
+  function streakPillHtml(label, streak) {
+    if (!streak.count) return "";
+    const hot = streak.type === "success";
+    const singular = hot ? "success" : "fail";
+    const plural = hot ? "successes" : "fails";
+    const word = streak.count === 1 ? singular : plural;
+    return `<span class="streak-pill ${hot ? "hot" : "cold"}">${flameIcon(hot ? "hot" : "cold")} ${label}: ${streak.count} ${word}</span>`;
+  }
+
   function streakRowHtml(log, centered) {
-    const cur = currentFailStreak(log);
-    const longest = longestFailStreak(log);
-    if (!longest) return "";
+    const cur = currentStreak(log);
+    const longest = longestStreak(log);
+    if (!longest.count) return "";
     return `
       <div class="streak-row${centered ? " centered" : ""}">
-        ${cur > 0 ? `<span class="streak-pill active">${flameIcon("hot")} Current streak: ${cur} fail${cur === 1 ? "" : "s"}</span>` : ""}
-        <span class="streak-pill">${flameIcon("cold")} Longest streak: ${longest} fail${longest === 1 ? "" : "s"}</span>
+        ${streakPillHtml("Current streak", cur)}
+        ${streakPillHtml("Longest streak", longest)}
       </div>
     `;
   }

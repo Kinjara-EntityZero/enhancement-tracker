@@ -216,6 +216,51 @@
     return longest;
   }
 
+  // The run of consecutive same-outcome attempts at the very end of the log — "success" while
+  // you're on a hot streak, "fail" while you're on a cold one. Returns {type, count}, with
+  // type null (count 0) if the log has no real attempts yet. Unlike currentFailStreak, this
+  // doesn't stop counting the moment a success shows up — it just switches to tracking that.
+  function currentStreak(log) {
+    let type = null;
+    let count = 0;
+    for (let i = log.length - 1; i >= 0; i--) {
+      const entry = log[i];
+      if (entry.type === "adjust") continue;
+      if (type === null) {
+        type = entry.type;
+        count = 1;
+      } else if (entry.type === type) {
+        count++;
+      } else {
+        break;
+      }
+    }
+    return { type, count };
+  }
+
+  // The single longest same-outcome run anywhere in the log's history — could be a hot streak
+  // or a cold one, whichever was longer. Returns {type, count}.
+  function longestStreak(log) {
+    let bestType = null;
+    let best = 0;
+    let curType = null;
+    let cur = 0;
+    for (const entry of log) {
+      if (entry.type === "adjust") continue;
+      if (entry.type === curType) {
+        cur++;
+      } else {
+        curType = entry.type;
+        cur = 1;
+      }
+      if (cur > best) {
+        best = cur;
+        bestType = curType;
+      }
+    }
+    return { type: bestType, count: best };
+  }
+
   // Per-level breakdown, in level order for the given ladder. A level is only included if
   // it has real logged attempts — levels skipped via a manual "start at Tet" style
   // adjustment have none, so they're correctly omitted rather than showing a fabricated 0/0 row.
@@ -351,7 +396,7 @@
   global.EnhancementShared = {
     DEFAULT_LEVELS, SETS, SET_ORDER, WEAPON_CLASSES,
     nextLevel, isMaxed, freshAccessoryState, freshSetState,
-    computeStats, currentFailStreak, longestFailStreak, levelBreakdown, normalizeState,
+    computeStats, currentFailStreak, longestFailStreak, currentStreak, longestStreak, levelBreakdown, normalizeState,
     detectClassVariants, getPieceOverride, detectLevelVariants, romanNumeralFor
   };
 })(window);
