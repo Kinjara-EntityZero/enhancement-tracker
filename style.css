@@ -772,6 +772,19 @@ select, input[type=number] {
   font-size: 0.75rem;
 }
 
+.level-rate-avg {
+  color: var(--text-faint);
+  font-size: 0.78rem;
+}
+
+.level-rate-delta {
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.level-rate-delta.good { color: var(--success); }
+.level-rate-delta.bad { color: var(--fail); }
+
 .level-rate-pct {
   font-weight: 700;
   color: var(--text);

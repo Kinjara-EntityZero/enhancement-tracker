@@ -33,6 +33,13 @@
       pityThreshold: {
         Pri: 7, Duo: 7, Tri: 8, Tet: 9, Pen: 10, Hex: 12, Sep: 14, Oct: 16, Nov: 20, Dec: 30
       },
+      // Community-average total attempts (tries) to clear each level, keyed the same way as
+      // pityThreshold. Optional per set — only Rates by Level rows for a level in here get a
+      // "vs average" comparison; sets without this field render exactly as before.
+      avgAttempts: {
+        Pri: 2.96, Duo: 3.34, Tri: 3.64, Tet: 3.69, Pen: 4.61,
+        Hex: 5.36, Sep: 5.76, Oct: 7.09, Nov: 8.86, Dec: 13.39
+      },
       accessories: [
         { id: "ring1", name: "Ring 1", type: "ring", icon: "Images/Ekleta/ring.png" },
         { id: "ring2", name: "Ring 2", type: "ring", icon: "Images/Ekleta/ring.png" },

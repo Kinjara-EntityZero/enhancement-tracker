@@ -32,6 +32,23 @@
     return `<span class="streak-pill ${hot ? "hot" : "cold"}">${icon} ${label}: ${streak.count} ${word}</span>`;
   }
 
+  // "vs average" comparison for one Rates-by-Level row, if this set defines community averages
+  // (currently just Ekleta). Cleared levels get a colored delta (fewer tries than average is
+  // lucky/green, more is unlucky/red); an in-progress level just shows the average as a plain
+  // reference point, since partial attempts aren't meaningfully comparable to a full average yet.
+  function avgAttemptsHtml(setDef, row) {
+    if (!setDef.avgAttempts) return "";
+    const avg = setDef.avgAttempts[row.level];
+    if (avg == null) return "";
+    if (!row.cleared) {
+      return `<span class="level-rate-avg">avg ${avg.toFixed(2)}</span>`;
+    }
+    const delta = row.attempts - avg;
+    const sign = delta > 0 ? "+" : "";
+    const cls = delta < 0 ? "good" : delta > 0 ? "bad" : "";
+    return `<span class="level-rate-avg">avg ${avg.toFixed(2)}</span><span class="level-rate-delta ${cls}">${sign}${delta.toFixed(2)} vs avg</span>`;
+  }
+
   function streakRowHtml(log, centered) {
     const cur = currentStreak(log);
     const longest = longestStreak(log);
@@ -771,6 +788,7 @@
                 <span>${r.attempts} tries</span>
                 <span>${r.fails} fails</span>
                 ${!r.cleared ? `<span class="level-rate-tag">in progress</span>` : ""}
+                ${avgAttemptsHtml(setDef, r)}
               </span>
               <span class="level-rate-pct">${r.rate}%</span>
             </div>
