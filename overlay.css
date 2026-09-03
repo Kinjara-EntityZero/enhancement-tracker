@@ -263,8 +263,8 @@ html, body {
 
 .ov-lvl-row {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 1px;
   font-size: 0.7rem;
   padding: 2px 4px;
   border-radius: 4px;
@@ -273,6 +273,12 @@ html, body {
 
 .ov-lvl-row.in-progress {
   background: rgba(var(--accent-rgb), 0.12);
+}
+
+.ov-lvl-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .ov-lvl-row .lvl {
@@ -295,6 +301,15 @@ html, body {
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+
+.ov-lvl-avg {
+  padding-left: 36px;
+  font-size: 0.62rem;
+  color: var(--text-faint);
+}
+.ov-avg-delta { font-weight: 700; }
+.ov-avg-delta.good { color: var(--success); }
+.ov-avg-delta.bad { color: var(--fail); }
 
 .ov-preview-badge {
   flex: 0 0 100%;

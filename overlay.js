@@ -60,6 +60,22 @@
     return numeral ? `<span class="roman-numeral">${numeral}</span>` : "";
   }
 
+  // Mirrors app.js's avgAttemptsHtml — "vs average" for one Rates-by-Level row, if this set
+  // defines community averages (currently just Ekleta). Cleared levels get a colored delta;
+  // an in-progress level just shows the average as a plain reference point.
+  function avgAttemptsHtml(row) {
+    if (!SET_DEF.avgAttempts) return "";
+    const avg = SET_DEF.avgAttempts[row.level];
+    if (avg == null) return "";
+    if (!row.cleared) {
+      return `<div class="ov-lvl-avg">avg ${avg.toFixed(2)}</div>`;
+    }
+    const delta = row.attempts - avg;
+    const sign = delta > 0 ? "+" : "";
+    const cls = delta < 0 ? "good" : delta > 0 ? "bad" : "";
+    return `<div class="ov-lvl-avg">avg ${avg.toFixed(2)} <span class="ov-avg-delta ${cls}">${sign}${delta.toFixed(2)}</span></div>`;
+  }
+
   function iconFor(acc, selectedClass) {
     if (SET_DEF.classVariant) {
       if (classVariantResult && selectedClass && classVariantResult.icons[selectedClass]) {
@@ -155,9 +171,12 @@
         <div class="ov-level-rates">
           ${levelRows.map((r) => `
             <div class="ov-lvl-row${!r.cleared ? " in-progress" : ""}">
-              <span class="lvl">${r.level.toUpperCase()}</span>
-              <span class="cnt"><span class="s">${r.successes}s</span> <span class="f">${r.fails}f</span></span>
-              <span class="pct">${r.rate}%</span>
+              <div class="ov-lvl-main">
+                <span class="lvl">${r.level.toUpperCase()}</span>
+                <span class="cnt"><span class="s">${r.successes}s</span> <span class="f">${r.fails}f</span></span>
+                <span class="pct">${r.rate}%</span>
+              </div>
+              ${avgAttemptsHtml(r)}
             </div>
           `).join("")}
         </div>` : ""}
