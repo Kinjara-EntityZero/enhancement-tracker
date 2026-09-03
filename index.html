@@ -16,6 +16,7 @@
     </div>
     <div class="toolbar">
       <div id="file-sync" class="file-sync"></div>
+      <button id="btn-changelog" class="btn btn-ghost" title="See what's changed recently">What's New<span class="changelog-dot" id="changelog-dot"></span></button>
       <button id="btn-export" class="btn btn-ghost" title="Download a one-off backup of all your data">Export</button>
       <button id="btn-import" class="btn btn-ghost" title="Restore data from a backup file">Import</button>
       <input type="file" id="file-import" accept="application/json" hidden>
@@ -38,6 +39,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="changelog-modal-root"></div>
 
 <script src="shared.js"></script>
 <script src="app.js"></script>

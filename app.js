@@ -2,6 +2,64 @@
   "use strict";
 
   const STORAGE_KEY = "bdo-enhancement-tracker-v1";
+  const CHANGELOG_SEEN_KEY = "bdo-enhancement-tracker-changelog-seen";
+
+  // Manually maintained, newest first. Add an entry here whenever a change ships.
+  const CHANGELOG = [
+    {
+      date: "2026-09-02",
+      title: "What's New panel",
+      items: [
+        "Added this changelog so you can see what's changed as the tracker gets updated.",
+      ],
+    },
+    {
+      date: "2026-09-02",
+      title: "Ekleta overlay vs-average comparison",
+      items: [
+        "The Ekleta OBS overlay now shows how your attempts compare to the community average per level, matching the main tracker.",
+      ],
+    },
+    {
+      date: "2026-08-28",
+      title: "Ekleta vs community average",
+      items: [
+        "Ekleta's Rates by Level now shows how many tries you needed for each level next to the community average, color-coded for lucky/unlucky.",
+      ],
+    },
+    {
+      date: "2026-08-24",
+      title: "Streak icons: fire vs ice",
+      items: [
+        "Current/longest streaks now show a fire icon for a run of successes and an ice cube for a run of fails, colored red/blue to match.",
+        "The Overall History panel now shows its own current/longest streak too, not just the per-item detail view.",
+      ],
+    },
+    {
+      date: "2026-08-21",
+      title: "Safer save-file linking",
+      items: [
+        "Linking or reconnecting a save file now checks whether the picked file already has real data in it and asks before overwriting, instead of silently replacing it.",
+      ],
+    },
+    {
+      date: "2026-08-21",
+      title: "Overlays tab",
+      items: [
+        "Added an \"Overlays\" tab with downloadable, ready-to-use OBS overlay bundles (icon art + setup guide included), and a live in-browser preview for every gear set.",
+      ],
+    },
+    {
+      date: "2026-08-21",
+      title: "Initial release",
+      items: [
+        "Tracker for Ekleta, Apeiron, Edana, Sovereign, and Alchemy Stones, each with its own pity table, level ladder, and theme.",
+        "An \"Overview\" tab: all-sets dashboard, cross-set activity feed, and fail-streak tracking.",
+        "Shareable summary cards you can download as an image.",
+        "Roman-numeral badges on enhancement icons, per-level rate breakdowns, and matching OBS Browser Source overlays for every set.",
+      ],
+    },
+  ];
 
   const {
     SETS, SET_ORDER,
@@ -16,6 +74,61 @@
     const numeral = romanNumeralFor(level);
     return numeral ? `<span class="roman-numeral">${numeral}</span>` : "";
   }
+
+  // ---------- What's New (changelog) ----------
+
+  function hasUnseenChangelog() {
+    const seen = localStorage.getItem(CHANGELOG_SEEN_KEY);
+    return !seen || seen < CHANGELOG[0].date;
+  }
+
+  function updateChangelogDot() {
+    const dot = document.getElementById("changelog-dot");
+    if (dot) dot.classList.toggle("show", hasUnseenChangelog());
+  }
+
+  function formatChangelogDate(iso) {
+    const d = new Date(iso + "T00:00:00");
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+
+  function closeChangelog() {
+    document.getElementById("changelog-modal-root").innerHTML = "";
+  }
+
+  function openChangelog() {
+    const root = document.getElementById("changelog-modal-root");
+    root.innerHTML = `
+      <div class="modal-backdrop" id="changelog-backdrop">
+        <div class="modal-box changelog-modal">
+          <div class="modal-header">
+            <h2>What's New</h2>
+            <button id="btn-close-changelog" class="modal-close" title="Close">&times;</button>
+          </div>
+          <div class="changelog-list">
+            ${CHANGELOG.map((entry) => `
+              <div class="changelog-entry">
+                <div class="changelog-date">${formatChangelogDate(entry.date)}</div>
+                <div class="changelog-title">${escapeHtml(entry.title)}</div>
+                <ul class="changelog-items">
+                  ${entry.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+                </ul>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById("changelog-backdrop").addEventListener("click", (e) => {
+      if (e.target.id === "changelog-backdrop") closeChangelog();
+    });
+    document.getElementById("btn-close-changelog").addEventListener("click", closeChangelog);
+
+    localStorage.setItem(CHANGELOG_SEEN_KEY, CHANGELOG[0].date);
+    updateChangelogDot();
+  }
+
+  document.getElementById("btn-changelog").addEventListener("click", openChangelog);
 
   // `log` must be in chronological (oldest-first) order — the same array a pity stack would
   // have been built from. Used both for a single item's log and for a merged, re-sorted
@@ -1261,6 +1374,7 @@
 
   render();
   renderFileStatus();
+  updateChangelogDot();
   tryReconnectFile();
   SET_ORDER.forEach((key) => {
     if (SETS[key].classVariant) loadClassVariants(key);
