@@ -772,6 +772,18 @@ select, input[type=number] {
   font-size: 0.75rem;
 }
 
+.level-rate-success {
+  color: var(--success);
+}
+
+.level-rate-pity {
+  color: #5aa9e6;
+}
+
+.level-rate-fail {
+  color: var(--fail);
+}
+
 .level-rate-avg {
   color: var(--text-faint);
   font-size: 0.78rem;
@@ -846,6 +858,7 @@ select, input[type=number] {
 
 .hist-row.result-fail { border-left: 3px solid var(--fail); }
 .hist-row.result-success { border-left: 3px solid var(--success); }
+.hist-row.result-pity { border-left: 3px solid #5aa9e6; }
 .hist-row.result-adjust { border-left: 3px solid var(--text-faint); opacity: 0.8; }
 
 .hist-badge {
@@ -858,6 +871,7 @@ select, input[type=number] {
   white-space: nowrap;
 }
 .hist-badge.success { background: var(--success-dim); color: #b9f3d2; }
+.hist-badge.pity { background: #2c5f82; color: #cfe8fb; }
 .hist-badge.fail { background: var(--fail-dim); color: #ffd3d0; }
 .hist-badge.adjust { background: var(--panel-3); color: var(--text-dim); }
 
@@ -1362,3 +1376,123 @@ select, input[type=number] {
 }
 .changelog-items li { margin-bottom: 4px; }
 .changelog-items li:last-child { margin-bottom: 0; }
+
+/* ---------- Stats for Nerds ---------- */
+
+.nerd-stats-block {
+  margin-bottom: 24px;
+}
+
+.nerd-stats-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.nerd-stats-toggle h3 {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+.nerd-stats-caret {
+  color: var(--text-faint);
+  font-size: 0.7rem;
+}
+
+.nerd-stats-empty {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: var(--text-faint);
+}
+
+.nerd-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.nerd-stat {
+  background: var(--panel-3);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.nerd-stat-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+
+.nerd-stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: break-word;
+}
+
+.nerd-stat-sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-top: 3px;
+  line-height: 1.3;
+}
+
+.nerd-stats-caption {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-top: 16px;
+  margin-bottom: 6px;
+}
+
+.nerd-histogram {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 40px;
+  background: var(--panel-3);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.nerd-histogram-bar {
+  flex: 1;
+  min-height: 2px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-dim));
+  border-radius: 1px;
+}
+
+.nerd-histogram-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: var(--text-faint);
+  margin-top: 3px;
+}
+
+/* ---------- Lifetime totals (Overview tab) ---------- */
+
+.lifetime-totals-block {
+  margin-bottom: 20px;
+}
+.lifetime-totals-block h3 {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}

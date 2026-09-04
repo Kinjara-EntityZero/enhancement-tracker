@@ -138,8 +138,8 @@
     const ready = !maxed && acc.pityStack >= threshold;
 
     const log = acc.log || [];
-    const { total, successes, fails, rate } = computeStats(log);
-    const levelRows = SHOW_LEVELS ? levelBreakdown(log, SET_DEF.levels) : [];
+    const { total, successes, fails, rate } = computeStats(log, PITY_THRESHOLD);
+    const levelRows = SHOW_LEVELS ? levelBreakdown(log, SET_DEF.levels, PITY_THRESHOLD) : [];
 
     return `
       <div class="ov-card">
@@ -173,7 +173,7 @@
             <div class="ov-lvl-row${!r.cleared ? " in-progress" : ""}">
               <div class="ov-lvl-main">
                 <span class="lvl">${r.level.toUpperCase()}</span>
-                <span class="cnt"><span class="s">${r.successes}s</span> <span class="f">${r.fails}f</span></span>
+                <span class="cnt"><span class="s">${r.successes}s</span> <span class="p">${r.pity}p</span> <span class="f">${r.fails}f</span></span>
                 <span class="pct">${r.rate}%</span>
               </div>
               ${avgAttemptsHtml(r)}

@@ -182,37 +182,55 @@
     return { accessories, selectedId: def.accessories[0].id };
   }
 
-  // Overall totals across every logged attempt, regardless of level. "adjust" entries
-  // (manual level/pity corrections) are not real enhancement attempts, so they're excluded.
-  function computeStats(log) {
-    const total = log.filter((e) => e.type !== "adjust").length;
-    const successes = log.filter((e) => e.type === "success").length;
-    const fails = log.filter((e) => e.type === "fail").length;
-    const rate = total ? Math.round((successes / total) * 100) : 0;
-    return { total, successes, fails, rate };
+  // A "success" entry is actually a pity-guaranteed proc if it landed once the pity stack had
+  // already reached the threshold for that level — mechanically forced, not a lucky roll.
+  // Fail/adjust entries are never pity. Needs the set's pityThreshold map to tell the two
+  // apart; without one, nothing is ever classified as pity.
+  function isPityEntry(entry, pityThreshold) {
+    if (!entry || entry.type !== "success" || !pityThreshold) return false;
+    const threshold = pityThreshold[entry.targetLevel];
+    return threshold != null && entry.pityBefore >= threshold;
   }
 
-  // Consecutive fails at the very end of the log (i.e. since the last success), ignoring
-  // "adjust" entries entirely since they aren't real attempts. Computed fresh from the log
-  // rather than trusted from pityStack, so it stays correct even after an undo/manual edit.
-  function currentFailStreak(log) {
+  // Overall totals across every logged attempt, regardless of level. "adjust" entries
+  // (manual level/pity corrections) are not real enhancement attempts, so they're excluded.
+  // A pity-guaranteed success (see isPityEntry) is split out of `successes` into its own
+  // `pity` count — it wasn't a lucky roll, so it shouldn't inflate the success rate.
+  function computeStats(log, pityThreshold) {
+    const real = log.filter((e) => e.type !== "adjust");
+    const total = real.length;
+    const pity = real.filter((e) => isPityEntry(e, pityThreshold)).length;
+    const successes = real.filter((e) => e.type === "success" && !isPityEntry(e, pityThreshold)).length;
+    const fails = real.filter((e) => e.type === "fail").length;
+    const rate = total ? Math.round((successes / total) * 100) : 0;
+    return { total, successes, pity, fails, rate };
+  }
+
+  // Consecutive fails at the very end of the log (i.e. since the last genuine success),
+  // ignoring "adjust" entries entirely since they aren't real attempts. A pity-guaranteed
+  // success (see isPityEntry) is skipped too, not treated as breaking the streak — it wasn't
+  // a real win ending your bad luck, just the game forcing a result, so failing again right
+  // after one continues the same streak instead of starting a new one. Computed fresh from the
+  // log rather than trusted from pityStack, so it stays correct even after an undo/manual edit.
+  function currentFailStreak(log, pityThreshold) {
     let streak = 0;
     for (let i = log.length - 1; i >= 0; i--) {
       const entry = log[i];
-      if (entry.type === "adjust") continue;
+      if (entry.type === "adjust" || isPityEntry(entry, pityThreshold)) continue;
       if (entry.type === "fail") { streak++; continue; }
-      break; // success
+      break; // genuine success
     }
     return streak;
   }
 
   // The longest run of consecutive fails anywhere in the log's history, not just the current
   // one. A "worst it ever got" stat, independent of whatever the pity threshold happened to be.
-  function longestFailStreak(log) {
+  // Pity successes are skipped (see currentFailStreak) so they don't artificially cap a streak.
+  function longestFailStreak(log, pityThreshold) {
     let longest = 0;
     let running = 0;
     for (const entry of log) {
-      if (entry.type === "adjust") continue;
+      if (entry.type === "adjust" || isPityEntry(entry, pityThreshold)) continue;
       if (entry.type === "fail") {
         running++;
         longest = Math.max(longest, running);
@@ -227,12 +245,13 @@
   // you're on a hot streak, "fail" while you're on a cold one. Returns {type, count}, with
   // type null (count 0) if the log has no real attempts yet. Unlike currentFailStreak, this
   // doesn't stop counting the moment a success shows up — it just switches to tracking that.
-  function currentStreak(log) {
+  // Pity successes are skipped entirely (see currentFailStreak) rather than counted as either.
+  function currentStreak(log, pityThreshold) {
     let type = null;
     let count = 0;
     for (let i = log.length - 1; i >= 0; i--) {
       const entry = log[i];
-      if (entry.type === "adjust") continue;
+      if (entry.type === "adjust" || isPityEntry(entry, pityThreshold)) continue;
       if (type === null) {
         type = entry.type;
         count = 1;
@@ -246,14 +265,15 @@
   }
 
   // The single longest same-outcome run anywhere in the log's history — could be a hot streak
-  // or a cold one, whichever was longer. Returns {type, count}.
-  function longestStreak(log) {
+  // or a cold one, whichever was longer. Returns {type, count}. Pity successes are skipped, same
+  // as currentStreak.
+  function longestStreak(log, pityThreshold) {
     let bestType = null;
     let best = 0;
     let curType = null;
     let cur = 0;
     for (const entry of log) {
-      if (entry.type === "adjust") continue;
+      if (entry.type === "adjust" || isPityEntry(entry, pityThreshold)) continue;
       if (entry.type === curType) {
         cur++;
       } else {
@@ -271,18 +291,21 @@
   // Per-level breakdown, in level order for the given ladder. A level is only included if
   // it has real logged attempts — levels skipped via a manual "start at Tet" style
   // adjustment have none, so they're correctly omitted rather than showing a fabricated 0/0 row.
-  function levelBreakdown(log, levels) {
+  // A pity-guaranteed success (see isPityEntry) is split out of `successes` into its own
+  // `pity` count, same as computeStats — it still clears the level, just not as a genuine win.
+  function levelBreakdown(log, levels, pityThreshold) {
     const ladder = levels || DEFAULT_LEVELS;
     const rows = [];
     for (let i = 1; i < ladder.length; i++) {
       const level = ladder[i];
       const entries = log.filter((e) => e.type !== "adjust" && e.targetLevel === level);
       if (!entries.length) continue;
-      const successes = entries.filter((e) => e.type === "success").length;
+      const pity = entries.filter((e) => isPityEntry(e, pityThreshold)).length;
+      const successes = entries.filter((e) => e.type === "success" && !isPityEntry(e, pityThreshold)).length;
       const fails = entries.filter((e) => e.type === "fail").length;
-      const attempts = successes + fails;
+      const attempts = successes + pity + fails;
       const rate = attempts ? Math.round((successes / attempts) * 100) : 0;
-      rows.push({ level, attempts, successes, fails, rate, cleared: successes > 0 });
+      rows.push({ level, attempts, successes, pity, fails, rate, cleared: successes > 0 || pity > 0 });
     }
     return rows;
   }
@@ -403,7 +426,7 @@
   global.EnhancementShared = {
     DEFAULT_LEVELS, SETS, SET_ORDER, WEAPON_CLASSES,
     nextLevel, isMaxed, freshAccessoryState, freshSetState,
-    computeStats, currentFailStreak, longestFailStreak, currentStreak, longestStreak, levelBreakdown, normalizeState,
+    computeStats, isPityEntry, currentFailStreak, longestFailStreak, currentStreak, longestStreak, levelBreakdown, normalizeState,
     detectClassVariants, getPieceOverride, detectLevelVariants, romanNumeralFor
   };
 })(window);

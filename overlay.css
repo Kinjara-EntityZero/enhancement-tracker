@@ -294,6 +294,7 @@ html, body {
   gap: 6px;
 }
 .ov-lvl-row .cnt .s { color: var(--success); }
+.ov-lvl-row .cnt .p { color: #5aa9e6; }
 .ov-lvl-row .cnt .f { color: var(--fail); }
 
 .ov-lvl-row .pct {

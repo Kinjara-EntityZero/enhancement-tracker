@@ -7,6 +7,25 @@
   // Manually maintained, newest first. Add an entry here whenever a change ships.
   const CHANGELOG = [
     {
+      date: "2026-09-04",
+      title: "Pity is no longer counted as a success",
+      items: [
+        "A success that only happened because your pity stack hit the guaranteed threshold is now split out as its own \"Pity\" outcome, separate from a genuine (lucky) success, everywhere stats are shown — the detail panel, Overall History, the Overview tab, share cards, and the Ekleta overlay.",
+        "A pity proc no longer breaks a fail streak: fail, fail, ..., pity, fail, fail now counts as one continuous streak instead of resetting.",
+        "Rates by Level now shows successes/pity/fails as three explicit numbers (green/blue/red) instead of folding pity into the success count, and \"tries\" is now labeled \"taps\".",
+      ],
+    },
+    {
+      date: "2026-09-04",
+      title: "Stats for Nerds",
+      items: [
+        "New collapsible \"Stats for Nerds\" section on each item: a days-to-Dec projection at your current pace, busiest day, longest dry spell, pace, and (Ekleta only) a luck score versus the community average.",
+        "Luckiest/Cursed Accessory: which piece in the set has the best and worst success rate so far.",
+        "An hour-of-day histogram of when you tend to log attempts.",
+        "Overview tab now also shows a lifetime total across all 5 sets combined, and every set card/streak flag is caught up with the pity split and the fire/ice streak coloring.",
+      ],
+    },
+    {
       date: "2026-09-02",
       title: "What's New panel",
       items: [
@@ -64,7 +83,7 @@
   const {
     SETS, SET_ORDER,
     nextLevel, isMaxed, freshSetState,
-    computeStats, currentFailStreak, longestFailStreak, currentStreak, longestStreak, levelBreakdown, normalizeState,
+    computeStats, isPityEntry, currentFailStreak, longestFailStreak, currentStreak, longestStreak, levelBreakdown, normalizeState,
     detectClassVariants, getPieceOverride, detectLevelVariants, romanNumeralFor
   } = window.EnhancementShared;
 
@@ -130,6 +149,194 @@
 
   document.getElementById("btn-changelog").addEventListener("click", openChangelog);
 
+  // ---------- Stats for Nerds ----------
+  // Deeper, opt-in stats computed straight from one item's log — pity behavior, pacing, and
+  // timing patterns that aren't interesting enough for the main stats row but are fun to dig
+  // into. "adjust" entries are never real clicks, so every stat here ignores them.
+
+  function msToDuration(ms) {
+    const mins = Math.round(ms / 60000);
+    if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ${mins % 60}m`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ${hours % 24}h`;
+  }
+
+  function computeNerdStats(setDef, acc) {
+    const real = acc.log.filter((e) => e.type === "success" || e.type === "fail");
+
+    const dayCounts = new Map();
+    real.forEach((e) => {
+      const day = new Date(e.timestamp).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+      dayCounts.set(day, (dayCounts.get(day) || 0) + 1);
+    });
+    let busiestDay = null;
+    dayCounts.forEach((count, day) => {
+      if (!busiestDay || count > busiestDay.count) busiestDay = { day, count };
+    });
+
+    const sorted = real.slice().sort((a, b) => a.timestamp - b.timestamp);
+    let longestGapMs = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      longestGapMs = Math.max(longestGapMs, sorted[i].timestamp - sorted[i - 1].timestamp);
+    }
+
+    const elapsedMs = sorted.length >= 2 ? sorted[sorted.length - 1].timestamp - sorted[0].timestamp : 0;
+    const elapsedDays = Math.max(1, Math.round(elapsedMs / 86400000));
+    const pacePerDay = real.length ? real.length / Math.max(1, dayCounts.size) : 0;
+
+    const hourCounts = new Array(24).fill(0);
+    real.forEach((e) => hourCounts[new Date(e.timestamp).getHours()]++);
+
+    return { total: real.length, busiestDay, longestGapMs, elapsedDays, activeDays: dayCounts.size, pacePerDay, hourCounts };
+  }
+
+  // Rough projection: sum of the community average attempts for every level between the
+  // current one and the ladder's last level, divided by this item's own current pace. Only
+  // meaningful for sets that define avgAttempts (currently just Ekleta), and doesn't account
+  // for pity already banked toward the next level -- a ballpark, not a promise.
+  function computeDaysToMax(setDef, acc, pacePerDay) {
+    if (!setDef.avgAttempts || !pacePerDay) return null;
+    const levels = setDef.levels;
+    const maxLevel = levels[levels.length - 1];
+    if (acc.currentLevel === maxLevel) return { maxed: true, maxLevel };
+    const curIdx = levels.indexOf(acc.currentLevel);
+    if (curIdx === -1) return null;
+    let remainingAttempts = 0;
+    for (let i = curIdx + 1; i < levels.length; i++) {
+      const avg = setDef.avgAttempts[levels[i]];
+      if (avg != null) remainingAttempts += avg;
+    }
+    return { maxed: false, maxLevel, remainingAttempts, days: remainingAttempts / pacePerDay };
+  }
+
+  // Which piece in the current set has the best/worst success rate, so far — needs at least
+  // two tracked pieces with real attempts logged to be a meaningful comparison.
+  function computeSetLeaderboard(setDef, setState) {
+    const rows = setDef.accessories
+      .filter((a) => pieceStatus(setDef, setState, a.id).kind === "normal")
+      .map((a) => ({ name: setState.accessories[a.id].name, ...computeStats(setState.accessories[a.id].log, setDef.pityThreshold) }))
+      .filter((r) => r.total > 0);
+    if (rows.length < 2) return null;
+    const best = rows.slice().sort((a, b) => b.rate - a.rate || a.total - b.total)[0];
+    const worst = rows.slice().sort((a, b) => a.rate - b.rate || b.total - a.total)[0];
+    if (best === worst) return null;
+    return { best, worst };
+  }
+
+  // Sum of (your attempts - community average) across every level you've cleared on this
+  // item, for sets that define avgAttempts (currently just Ekleta). Negative = luckier than
+  // average overall; positive = unluckier.
+  function computeLuckScore(setDef, acc) {
+    if (!setDef.avgAttempts) return null;
+    const rows = levelBreakdown(acc.log, setDef.levels, setDef.pityThreshold).filter((r) => r.cleared);
+    if (!rows.length) return null;
+    let score = 0;
+    rows.forEach((r) => {
+      const avg = setDef.avgAttempts[r.level];
+      if (avg != null) score += r.attempts - avg;
+    });
+    return { score, levelsCleared: rows.length };
+  }
+
+  function hourHistogramHtml(hourCounts) {
+    const max = Math.max(1, ...hourCounts);
+    return `
+      <div class="nerd-histogram" title="Attempts logged by hour of day (your local time)">
+        ${hourCounts.map((c) => `<div class="nerd-histogram-bar" style="height:${Math.round((c / max) * 100)}%" title="${c} at this hour"></div>`).join("")}
+      </div>
+      <div class="nerd-histogram-labels"><span>12am</span><span>12pm</span><span>11pm</span></div>
+    `;
+  }
+
+  function daysToMaxHtml(info) {
+    if (!info) return "";
+    if (info.maxed) {
+      return nerdStatHtml(`Days to ${info.maxLevel.toUpperCase()}`, "&#9733;", "already maxed");
+    }
+    const approx = info.days >= 730 ? ` (~${(info.days / 365).toFixed(1)}y)` : info.days >= 60 ? ` (~${(info.days / 30).toFixed(1)}mo)` : "";
+    return nerdStatHtml(
+      `Days to ${info.maxLevel.toUpperCase()}`,
+      `${info.days.toFixed(1)}${approx}`,
+      `at your current pace &mdash; ~${info.remainingAttempts.toFixed(1)} attempts left, on average`
+    );
+  }
+
+  function nerdStatHtml(label, value, sub) {
+    return `
+      <div class="nerd-stat">
+        <div class="nerd-stat-label">${label}</div>
+        <div class="nerd-stat-value">${value}</div>
+        ${sub ? `<div class="nerd-stat-sub">${sub}</div>` : ""}
+      </div>
+    `;
+  }
+
+  function nerdStatsBlockHtml(setDef, setState, acc) {
+    const n = computeNerdStats(setDef, acc);
+    if (!n.total) {
+      return `
+        <div class="card-block nerd-stats-block">
+          ${nerdStatsToggleHtml()}
+          ${statsForNerdsOpen ? `<div class="nerd-stats-empty">Log a few attempts to unlock these.</div>` : ""}
+        </div>
+      `;
+    }
+
+    const luck = computeLuckScore(setDef, acc);
+    const leaderboard = computeSetLeaderboard(setDef, setState);
+    const daysToMax = computeDaysToMax(setDef, acc, n.pacePerDay);
+
+    return `
+      <div class="card-block nerd-stats-block">
+        ${nerdStatsToggleHtml()}
+        ${statsForNerdsOpen ? `
+          <div class="nerd-stats-grid">
+            ${daysToMaxHtml(daysToMax)}
+            ${nerdStatHtml(
+              "Busiest day",
+              n.busiestDay ? n.busiestDay.count : "&mdash;",
+              n.busiestDay ? `attempts on ${n.busiestDay.day}` : ""
+            )}
+            ${nerdStatHtml(
+              "Longest dry spell",
+              n.longestGapMs ? msToDuration(n.longestGapMs) : "&mdash;",
+              "between two attempts"
+            )}
+            ${nerdStatHtml(
+              "Pace",
+              n.pacePerDay.toFixed(1),
+              `attempts/active day &middot; ${n.activeDays} active day${n.activeDays === 1 ? "" : "s"} over ${n.elapsedDays} day${n.elapsedDays === 1 ? "" : "s"}`
+            )}
+            ${luck ? nerdStatHtml(
+              "Luck score",
+              `${luck.score > 0 ? "+" : ""}${luck.score.toFixed(1)}`,
+              `vs average across ${luck.levelsCleared} cleared level${luck.levelsCleared === 1 ? "" : "s"} &mdash; ${luck.score < 0 ? "luckier" : luck.score > 0 ? "unluckier" : "dead on"} than average`
+            ) : ""}
+          </div>
+          ${leaderboard ? `
+            <div class="nerd-stats-grid nerd-stats-grid-2">
+              ${nerdStatHtml("Luckiest Accessory", escapeHtml(leaderboard.best.name), `${leaderboard.best.rate}% success rate`)}
+              ${nerdStatHtml("Cursed Accessory", escapeHtml(leaderboard.worst.name), `${leaderboard.worst.rate}% success rate`)}
+            </div>
+          ` : ""}
+          <div class="nerd-stats-caption">Attempts by hour of day</div>
+          ${hourHistogramHtml(n.hourCounts)}
+        ` : ""}
+      </div>
+    `;
+  }
+
+  function nerdStatsToggleHtml() {
+    return `
+      <button class="nerd-stats-toggle" id="btn-toggle-nerd-stats">
+        <h3>Stats for Nerds</h3>
+        <span class="nerd-stats-caret">${statsForNerdsOpen ? "&#9650;" : "&#9660;"}</span>
+      </button>
+    `;
+  }
+
   // `log` must be in chronological (oldest-first) order — the same array a pity stack would
   // have been built from. Used both for a single item's log and for a merged, re-sorted
   // multi-item timeline (Overall History), where it reads as "how many of the most recent
@@ -162,9 +369,9 @@
     return `<span class="level-rate-avg">avg ${avg.toFixed(2)}</span><span class="level-rate-delta ${cls}">${sign}${delta.toFixed(2)} vs avg</span>`;
   }
 
-  function streakRowHtml(log, centered) {
-    const cur = currentStreak(log);
-    const longest = longestStreak(log);
+  function streakRowHtml(log, pityThreshold, centered) {
+    const cur = currentStreak(log, pityThreshold);
+    const longest = longestStreak(log, pityThreshold);
     if (!longest.count) return "";
     return `
       <div class="streak-row${centered ? " centered" : ""}">
@@ -190,6 +397,7 @@
 
   let state = loadState();
   let overallFilter = "all";
+  let statsForNerdsOpen = false;
 
   // The set (Ekleta / Apeiron / Edana / Sovereign / ...) currently shown in the UI, and its config/state shortcuts.
   function activeSetDef() {
@@ -782,8 +990,8 @@
     const threshold = target ? setDef.pityThreshold[target] : 0;
     const ready = !maxed && acc.pityStack >= threshold;
 
-    const { total, successes, fails, rate } = computeStats(acc.log);
-    const levelRows = levelBreakdown(acc.log, setDef.levels);
+    const { total, successes, pity, fails, rate } = computeStats(acc.log, setDef.pityThreshold);
+    const levelRows = levelBreakdown(acc.log, setDef.levels, setDef.pityThreshold);
     const iconSrc = getAccessoryIcon(setDef, setState, acc.id);
     const setFullyMaxed = maxed && isSetFullyMaxed(setDef, setState);
 
@@ -793,6 +1001,7 @@
         <div class="stats-row${centered ? " centered" : ""}">
           <div class="stat"><div class="val">${stats.total}</div><div class="lbl">Attempts</div></div>
           <div class="stat"><div class="val">${stats.successes}</div><div class="lbl">Successes</div></div>
+          <div class="stat"><div class="val">${stats.pity}</div><div class="lbl">Pity</div></div>
           <div class="stat"><div class="val">${stats.fails}</div><div class="lbl">Fails</div></div>
           <div class="stat"><div class="val">${stats.rate}%</div><div class="lbl">Success Rate</div></div>
         </div>
@@ -808,8 +1017,8 @@
       leftBoxHtml = `
         <div class="card-block maxed-celebration">
           <div class="maxed-celebration-title">★ Everything Max Level</div>
-          ${statsRowHtml(`Overall &mdash; every level combined, all ${categoryLabel(setDef)}`, computeStats(allLogs), true)}
-          ${streakRowHtml(allLogs, true)}
+          ${statsRowHtml(`Overall &mdash; every level combined, all ${categoryLabel(setDef)}`, computeStats(allLogs, setDef.pityThreshold), true)}
+          ${streakRowHtml(allLogs, setDef.pityThreshold, true)}
           <div class="undo-row centered">
             <button id="btn-undo" ${acc.log.length ? "" : "disabled"}>Undo ${escapeHtml(acc.name)}'s last log entry</button>
           </div>
@@ -819,8 +1028,8 @@
       leftBoxHtml = `
         <div class="card-block maxed-celebration">
           <div class="maxed-celebration-title">★ Max Level Reached</div>
-          ${statsRowHtml("Overall &mdash; every level combined", { total, successes, fails, rate }, true)}
-          ${streakRowHtml(acc.log, true)}
+          ${statsRowHtml("Overall &mdash; every level combined", { total, successes, pity, fails, rate }, true)}
+          ${streakRowHtml(acc.log, setDef.pityThreshold, true)}
           <div class="undo-row centered">
             <button id="btn-undo" ${acc.log.length ? "" : "disabled"}>Undo last log entry</button>
           </div>
@@ -842,8 +1051,8 @@
           <div class="undo-row">
             <button id="btn-undo" ${acc.log.length ? "" : "disabled"}>Undo last log entry</button>
           </div>
-          ${statsRowHtml("Overall &mdash; every level combined", { total, successes, fails, rate })}
-          ${streakRowHtml(acc.log)}
+          ${statsRowHtml("Overall &mdash; every level combined", { total, successes, pity, fails, rate })}
+          ${streakRowHtml(acc.log, setDef.pityThreshold)}
         </div>
       `;
     }
@@ -898,8 +1107,10 @@
             <div class="level-rate-row${!r.cleared ? " in-progress" : ""}">
               <span class="level-rate-badge">${r.level.toUpperCase()}</span>
               <span class="level-rate-stats">
-                <span>${r.attempts} tries</span>
-                <span>${r.fails} fails</span>
+                <span>${r.attempts} taps</span>
+                <span class="level-rate-success">${r.successes} success${r.successes === 1 ? "" : "es"}</span>
+                <span class="level-rate-pity">${r.pity} pity</span>
+                <span class="level-rate-fail">${r.fails} fail${r.fails === 1 ? "" : "s"}</span>
                 ${!r.cleared ? `<span class="level-rate-tag">in progress</span>` : ""}
                 ${avgAttemptsHtml(setDef, r)}
               </span>
@@ -909,6 +1120,8 @@
         </div>
       </div>
       ` : ""}
+
+      ${nerdStatsBlockHtml(setDef, setState, acc)}
 
       <div class="history-section">
         <h3>History (${acc.log.length})</h3>
@@ -944,13 +1157,23 @@
       btn.addEventListener("click", () => deleteHistoryEntry(acc.id, btn.dataset.id));
     });
     document.getElementById("btn-share-card").addEventListener("click", () => {
-      generateShareCard(setDef, acc, iconSrc, { total, successes, fails, rate }, maxed, target);
+      generateShareCard(setDef, acc, iconSrc, { total, successes, pity, fails, rate }, maxed, target);
+    });
+    document.getElementById("btn-toggle-nerd-stats").addEventListener("click", () => {
+      statsForNerdsOpen = !statsForNerdsOpen;
+      renderDetail();
     });
   }
 
   function describeEntry(e, setDefOverride) {
     const setDef = setDefOverride || activeSetDef();
     if (e.type === "success") {
+      if (isPityEntry(e, setDef.pityThreshold)) {
+        return {
+          badgeClass: "pity", badgeText: "Pity",
+          desc: `Reached <b>${e.targetLevel.toUpperCase()}</b> &mdash; guaranteed at ${e.pityBefore}/${setDef.pityThreshold[e.targetLevel]}`
+        };
+      }
       return { badgeClass: "success", badgeText: "Success", desc: `Reached <b>${e.targetLevel.toUpperCase()}</b>` };
     } else if (e.type === "fail") {
       return {
@@ -973,7 +1196,7 @@
         const { badgeClass, badgeText, desc } = describeEntry(e);
         const canDelete = e.id === lastId;
         return `
-          <div class="hist-row result-${e.type}">
+          <div class="hist-row result-${badgeClass}">
             <span class="hist-badge ${badgeClass}">${badgeText}</span>
             <span class="hist-desc">${desc}</span>
             <span class="hist-time">${formatTime(e.timestamp)}</span>
@@ -1000,7 +1223,8 @@
     const filtered = overallFilter === "all" ? allEntries : allEntries.filter((e) => e.accId === overallFilter);
 
     const total = filtered.filter((e) => e.type !== "adjust").length;
-    const successes = filtered.filter((e) => e.type === "success").length;
+    const pity = filtered.filter((e) => isPityEntry(e, setDef.pityThreshold)).length;
+    const successes = filtered.filter((e) => e.type === "success" && !isPityEntry(e, setDef.pityThreshold)).length;
     const fails = filtered.filter((e) => e.type === "fail").length;
     const rate = total ? Math.round((successes / total) * 100) : 0;
     // filtered is newest-first (for display); streaks need chronological order.
@@ -1010,7 +1234,7 @@
       ? filtered.map((e) => {
           const { badgeClass, badgeText, desc } = describeEntry(e);
           return `
-            <div class="hist-row result-${e.type}" data-acc-id="${e.accId}">
+            <div class="hist-row result-${badgeClass}" data-acc-id="${e.accId}">
               <span class="hist-acc-tag">${e.accIcon ? `<img src="${e.accIcon}" alt="">` : ""}<span>${escapeHtml(e.accName)}</span></span>
               <span class="hist-badge ${badgeClass}">${badgeText}</span>
               <span class="hist-desc">${desc}</span>
@@ -1032,10 +1256,11 @@
       <div class="stats-row" style="margin-top:0; margin-bottom:14px;">
         <div class="stat"><div class="val">${total}</div><div class="lbl">Attempts</div></div>
         <div class="stat"><div class="val">${successes}</div><div class="lbl">Successes</div></div>
+        <div class="stat"><div class="val">${pity}</div><div class="lbl">Pity</div></div>
         <div class="stat"><div class="val">${fails}</div><div class="lbl">Fails</div></div>
         <div class="stat"><div class="val">${rate}%</div><div class="lbl">Success Rate</div></div>
       </div>
-      ${streakRowHtml(chronological)}
+      ${streakRowHtml(chronological, setDef.pityThreshold)}
       <div class="history-list">${rows}</div>
     `;
 
@@ -1064,10 +1289,10 @@
     const setState = state.sets[key];
     const trackedIds = setDef.accessories.filter((a) => pieceStatus(setDef, setState, a.id).kind === "normal");
     const allLogs = trackedIds.flatMap((a) => setState.accessories[a.id].log);
-    const stats = computeStats(allLogs);
+    const stats = computeStats(allLogs, setDef.pityThreshold);
     const maxedCount = trackedIds.filter((a) => isMaxed(setState.accessories[a.id].currentLevel, setDef.levels)).length;
-    const worstCurrent = trackedIds.reduce((m, a) => Math.max(m, currentFailStreak(setState.accessories[a.id].log)), 0);
-    const worstLongest = trackedIds.reduce((m, a) => Math.max(m, longestFailStreak(setState.accessories[a.id].log)), 0);
+    const worstCurrent = trackedIds.reduce((m, a) => Math.max(m, currentFailStreak(setState.accessories[a.id].log, setDef.pityThreshold)), 0);
+    const worstLongest = trackedIds.reduce((m, a) => Math.max(m, longestFailStreak(setState.accessories[a.id].log, setDef.pityThreshold)), 0);
     return {
       key, setDef, setState, trackedIds, stats,
       maxedCount, totalCount: trackedIds.length,
@@ -1096,10 +1321,11 @@
           <div class="overview-stats-row">
             <div class="stat"><div class="val">${s.stats.total}</div><div class="lbl">Attempts</div></div>
             <div class="stat"><div class="val">${s.stats.successes}</div><div class="lbl">Success</div></div>
+            <div class="stat"><div class="val">${s.stats.pity}</div><div class="lbl">Pity</div></div>
             <div class="stat"><div class="val">${s.stats.fails}</div><div class="lbl">Fails</div></div>
             <div class="stat"><div class="val">${s.stats.rate}%</div><div class="lbl">Rate</div></div>
           </div>
-          ${s.worstCurrent > 0 ? `<div class="overview-streak-flag">&#128293; Worst current streak: ${s.worstCurrent} fails</div>` : ""}
+          ${s.worstCurrent > 0 ? `<div class="overview-streak-flag">\u{1F9CA} Worst current streak: ${s.worstCurrent} fails</div>` : ""}
         </div>
       `;
     }).join("");
@@ -1120,7 +1346,7 @@
     const feedHtml = recent.length ? recent.map((e) => {
       const { badgeClass, badgeText, desc } = describeEntry(e, SETS[e.setKey]);
       return `
-        <div class="hist-row result-${e.type}" data-set="${e.setKey}" data-acc-id="${e.accId}">
+        <div class="hist-row result-${badgeClass}" data-set="${e.setKey}" data-acc-id="${e.accId}">
           <span class="feed-set-tag" data-theme="${e.theme || ""}">${e.setLabel}</span>
           <span class="hist-acc-tag">${e.accIcon ? `<img src="${e.accIcon}" alt="">` : ""}<span>${escapeHtml(e.accName)}</span></span>
           <span class="hist-badge ${badgeClass}">${badgeText}</span>
@@ -1130,7 +1356,21 @@
       `;
     }).join("") : `<div class="history-empty">No enhancement attempts logged yet across any set.</div>`;
 
+    const lifetimeTotal = summaries.reduce((a, s) => a + s.stats.total, 0);
+    const lifetimeSuccesses = summaries.reduce((a, s) => a + s.stats.successes, 0);
+    const lifetimeFails = summaries.reduce((a, s) => a + s.stats.fails, 0);
+    const lifetimeRate = lifetimeTotal ? Math.round((lifetimeSuccesses / lifetimeTotal) * 100) : 0;
+
     panel.innerHTML = `
+      <div class="card-block lifetime-totals-block">
+        <h3>Lifetime &mdash; every set combined</h3>
+        <div class="stats-row" style="margin-top:0;">
+          <div class="stat"><div class="val">${lifetimeTotal}</div><div class="lbl">Attempts</div></div>
+          <div class="stat"><div class="val">${lifetimeSuccesses}</div><div class="lbl">Successes</div></div>
+          <div class="stat"><div class="val">${lifetimeFails}</div><div class="lbl">Fails</div></div>
+          <div class="stat"><div class="val">${lifetimeRate}%</div><div class="lbl">Success Rate</div></div>
+        </div>
+      </div>
       <div class="overview-cards">${cardsHtml}</div>
       <div class="history-section overview-feed">
         <h3>Cross-Set Activity (last ${recent.length})</h3>
@@ -1277,6 +1517,7 @@
     const statsList = [
       ["Attempts", stats.total],
       ["Successes", stats.successes],
+      ["Pity", stats.pity],
       ["Fails", stats.fails],
       ["Success Rate", stats.rate + "%"],
     ];
@@ -1291,8 +1532,8 @@
       ctx.fillText(String(val), x, 290);
     });
 
-    const cur = currentFailStreak(acc.log);
-    const longest = longestFailStreak(acc.log);
+    const cur = currentFailStreak(acc.log, setDef.pityThreshold);
+    const longest = longestFailStreak(acc.log, setDef.pityThreshold);
     if (longest > 0) {
       ctx.fillStyle = "#f0827d";
       ctx.font = "600 18px -apple-system, Segoe UI, sans-serif";
