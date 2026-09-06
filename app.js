@@ -401,15 +401,23 @@
   // reference point, since partial attempts aren't meaningfully comparable to a full average yet.
   function avgAttemptsHtml(setDef, row) {
     if (!setDef.avgAttempts) return "";
-    const avg = setDef.avgAttempts[row.level];
-    if (avg == null) return "";
+    const perClear = setDef.avgAttempts[row.level];
+    if (perClear == null) return "";
     if (!row.cleared) {
-      return `<span class="level-rate-avg">avg ${avg.toFixed(2)}</span>`;
+      return `<span class="level-rate-avg">avg ${perClear.toFixed(2)}</span>`;
     }
+    // A level is cleared at most once per accessory (one success or pity entry), so for a row
+    // merged across several accessories (Stats for Nerds' set-wide breakdown), successes+pity
+    // is exactly how many of them cleared it here -- the average needs to scale by that many
+    // clears, not stay pinned to one, or every merged row would look artificially unlucky.
+    // For a single-accessory row this is always 1, so per-item behavior is unchanged.
+    const clears = row.successes + row.pity;
+    const avg = perClear * clears;
     const delta = row.attempts - avg;
     const sign = delta > 0 ? "+" : "";
     const cls = delta < 0 ? "good" : delta > 0 ? "bad" : "";
-    return `<span class="level-rate-avg">avg ${avg.toFixed(2)}</span><span class="level-rate-delta ${cls}">${sign}${delta.toFixed(2)} vs avg</span>`;
+    const avgLabel = clears > 1 ? `avg ${avg.toFixed(2)} (${perClear.toFixed(2)}&times;${clears})` : `avg ${avg.toFixed(2)}`;
+    return `<span class="level-rate-avg">${avgLabel}</span><span class="level-rate-delta ${cls}">${sign}${delta.toFixed(2)} vs avg</span>`;
   }
 
   function streakRowHtml(log, pityThreshold, centered) {
