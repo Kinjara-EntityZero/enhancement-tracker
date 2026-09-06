@@ -7,6 +7,13 @@
   // Manually maintained, newest first. Add an entry here whenever a change ships.
   const CHANGELOG = [
     {
+      date: "2026-09-05",
+      title: "Set-wide Rates by Level in Stats for Nerds",
+      items: [
+        "Stats for Nerds now includes a per-level breakdown merged across every tracked accessory in the set — all Pen attempts combined, all Hex attempts combined, and so on — using the same success/pity/fail styling as the per-item Rates by Level. Levels nobody has attempted yet are simply left out.",
+      ],
+    },
+    {
       date: "2026-09-04",
       title: "Pity is no longer counted as a success",
       items: [
@@ -287,6 +294,7 @@
     const luck = computeLuckScore(setDef, acc);
     const leaderboard = computeSetLeaderboard(setDef, setState);
     const daysToMax = computeDaysToMax(setDef, acc, n.pacePerDay);
+    const setLevelRows = computeSetLevelBreakdown(setDef, setState);
 
     return `
       <div class="card-block nerd-stats-block">
@@ -323,6 +331,12 @@
           ` : ""}
           <div class="nerd-stats-caption">Attempts by hour of day</div>
           ${hourHistogramHtml(n.hourCounts)}
+          ${setLevelRows.length ? `
+            <div class="nerd-stats-caption">Rates by level &mdash; all ${categoryLabel(setDef)} combined</div>
+            <div class="level-rates-list">
+              ${setLevelRows.map((r) => levelRateRowHtml(setDef, r)).join("")}
+            </div>
+          ` : ""}
         ` : ""}
       </div>
     `;
@@ -335,6 +349,35 @@
         <span class="nerd-stats-caret">${statsForNerdsOpen ? "&#9650;" : "&#9660;"}</span>
       </button>
     `;
+  }
+
+  // Shared by the per-item "Rates by Level" block and the Stats for Nerds set-wide breakdown
+  // below — same row shape, just fed by a different log (one item's vs. the whole set's merged).
+  function levelRateRowHtml(setDef, r) {
+    return `
+      <div class="level-rate-row${!r.cleared ? " in-progress" : ""}">
+        <span class="level-rate-badge">${r.level.toUpperCase()}</span>
+        <span class="level-rate-stats">
+          <span>${r.attempts} taps</span>
+          <span class="level-rate-success">${r.successes} success${r.successes === 1 ? "" : "es"}</span>
+          <span class="level-rate-pity">${r.pity} pity</span>
+          <span class="level-rate-fail">${r.fails} fail${r.fails === 1 ? "" : "s"}</span>
+          ${!r.cleared ? `<span class="level-rate-tag">in progress</span>` : ""}
+          ${avgAttemptsHtml(setDef, r)}
+        </span>
+        <span class="level-rate-pct">${r.rate}%</span>
+      </div>
+    `;
+  }
+
+  // Per-level breakdown merged across every trackable accessory in the set (not just the one
+  // you're looking at) -- "all Pen rates across the accessories," etc. Levels nobody has ever
+  // attempted are simply absent, same as the per-item version.
+  function computeSetLevelBreakdown(setDef, setState) {
+    const allLogs = setDef.accessories
+      .filter((a) => pieceStatus(setDef, setState, a.id).kind === "normal")
+      .flatMap((a) => setState.accessories[a.id].log);
+    return levelBreakdown(allLogs, setDef.levels, setDef.pityThreshold);
   }
 
   // `log` must be in chronological (oldest-first) order — the same array a pity stack would
@@ -1103,20 +1146,7 @@
       <div class="card-block level-rates-block">
         <h3>Rates by Level</h3>
         <div class="level-rates-list">
-          ${levelRows.map((r) => `
-            <div class="level-rate-row${!r.cleared ? " in-progress" : ""}">
-              <span class="level-rate-badge">${r.level.toUpperCase()}</span>
-              <span class="level-rate-stats">
-                <span>${r.attempts} taps</span>
-                <span class="level-rate-success">${r.successes} success${r.successes === 1 ? "" : "es"}</span>
-                <span class="level-rate-pity">${r.pity} pity</span>
-                <span class="level-rate-fail">${r.fails} fail${r.fails === 1 ? "" : "s"}</span>
-                ${!r.cleared ? `<span class="level-rate-tag">in progress</span>` : ""}
-                ${avgAttemptsHtml(setDef, r)}
-              </span>
-              <span class="level-rate-pct">${r.rate}%</span>
-            </div>
-          `).join("")}
+          ${levelRows.map((r) => levelRateRowHtml(setDef, r)).join("")}
         </div>
       </div>
       ` : ""}
