@@ -7,6 +7,17 @@
   // Manually maintained, newest first. Add an entry here whenever a change ships.
   const CHANGELOG = [
     {
+      date: "2026-09-06",
+      title: "Stats for Nerds is now cumulative, not per-item",
+      items: [
+        "Moved to its own standalone section (like Overall History) instead of living inside the item detail panel.",
+        "Every stat is now computed across all tracked accessories combined and no longer changes depending on which item you have selected.",
+        "Removed the days-to-Dec projection.",
+        "Added Best/Worst Enhance Level: which level (not accessory) has had the best and worst success rate so far.",
+        "Fixed the vs-average comparisons (Rates by Level and Luck score) to scale by how many accessories actually cleared a level, instead of comparing a merged total against a single accessory's average.",
+      ],
+    },
+    {
       date: "2026-09-05",
       title: "Set-wide Rates by Level in Stats for Nerds",
       items: [
@@ -157,9 +168,11 @@
   document.getElementById("btn-changelog").addEventListener("click", openChangelog);
 
   // ---------- Stats for Nerds ----------
-  // Deeper, opt-in stats computed straight from one item's log — pity behavior, pacing, and
-  // timing patterns that aren't interesting enough for the main stats row but are fun to dig
-  // into. "adjust" entries are never real clicks, so every stat here ignores them.
+  // Deeper, opt-in stats computed cumulatively across every trackable accessory in the set —
+  // pity behavior, pacing, and timing patterns that aren't interesting enough for the main
+  // stats row but are fun to dig into. Deliberately independent of which accessory happens to
+  // be selected, unlike the per-item Rates by Level above it. "adjust" entries are never real
+  // clicks, so every stat here ignores them.
 
   function msToDuration(ms) {
     const mins = Math.round(ms / 60000);
@@ -170,8 +183,13 @@
     return `${days}d ${hours % 24}h`;
   }
 
-  function computeNerdStats(setDef, acc) {
-    const real = acc.log.filter((e) => e.type === "success" || e.type === "fail");
+  // Merges every trackable accessory's log into one timeline for the pacing/timing stats below,
+  // the same "whole set combined" logs already used by computeSetLevelBreakdown.
+  function computeNerdStats(setDef, setState) {
+    const allLogs = setDef.accessories
+      .filter((a) => pieceStatus(setDef, setState, a.id).kind === "normal")
+      .flatMap((a) => setState.accessories[a.id].log);
+    const real = allLogs.filter((e) => e.type === "success" || e.type === "fail");
 
     const dayCounts = new Map();
     real.forEach((e) => {
@@ -199,25 +217,6 @@
     return { total: real.length, busiestDay, longestGapMs, elapsedDays, activeDays: dayCounts.size, pacePerDay, hourCounts };
   }
 
-  // Rough projection: sum of the community average attempts for every level between the
-  // current one and the ladder's last level, divided by this item's own current pace. Only
-  // meaningful for sets that define avgAttempts (currently just Ekleta), and doesn't account
-  // for pity already banked toward the next level -- a ballpark, not a promise.
-  function computeDaysToMax(setDef, acc, pacePerDay) {
-    if (!setDef.avgAttempts || !pacePerDay) return null;
-    const levels = setDef.levels;
-    const maxLevel = levels[levels.length - 1];
-    if (acc.currentLevel === maxLevel) return { maxed: true, maxLevel };
-    const curIdx = levels.indexOf(acc.currentLevel);
-    if (curIdx === -1) return null;
-    let remainingAttempts = 0;
-    for (let i = curIdx + 1; i < levels.length; i++) {
-      const avg = setDef.avgAttempts[levels[i]];
-      if (avg != null) remainingAttempts += avg;
-    }
-    return { maxed: false, maxLevel, remainingAttempts, days: remainingAttempts / pacePerDay };
-  }
-
   // Which piece in the current set has the best/worst success rate, so far — needs at least
   // two tracked pieces with real attempts logged to be a meaningful comparison.
   function computeSetLeaderboard(setDef, setState) {
@@ -232,19 +231,37 @@
     return { best, worst };
   }
 
-  // Sum of (your attempts - community average) across every level you've cleared on this
-  // item, for sets that define avgAttempts (currently just Ekleta). Negative = luckier than
-  // average overall; positive = unluckier.
-  function computeLuckScore(setDef, acc) {
+  // Sum of (your attempts - community average) across every level cleared anywhere in the set,
+  // for sets that define avgAttempts (currently just Ekleta). Negative = luckier than average
+  // overall; positive = unluckier. Takes the same merged setLevelRows as the set-wide Rates by
+  // Level breakdown, and scales each level's average by how many accessories cleared it there
+  // (same reasoning as avgAttemptsHtml) rather than comparing against a single clear's average.
+  function computeLuckScore(setDef, setLevelRows) {
     if (!setDef.avgAttempts) return null;
-    const rows = levelBreakdown(acc.log, setDef.levels, setDef.pityThreshold).filter((r) => r.cleared);
+    const rows = setLevelRows.filter((r) => r.cleared);
     if (!rows.length) return null;
     let score = 0;
+    let totalClears = 0;
     rows.forEach((r) => {
-      const avg = setDef.avgAttempts[r.level];
-      if (avg != null) score += r.attempts - avg;
+      const perClear = setDef.avgAttempts[r.level];
+      const clears = r.successes + r.pity;
+      if (perClear != null) score += r.attempts - perClear * clears;
+      totalClears += clears;
     });
-    return { score, levelsCleared: rows.length };
+    return { score, levelsCleared: rows.length, totalClears };
+  }
+
+  // Which level (not accessory) has had the best/worst success rate so far, across every
+  // accessory in the set combined -- e.g. "Pri clears easily, Dec is brutal." Only compares
+  // cleared levels, same reasoning as the Rates by Level delta (an in-progress level's rate
+  // isn't decided yet). Needs at least 2 comparable levels.
+  function computeLevelExtremes(setLevelRows) {
+    const rows = setLevelRows.filter((r) => r.cleared);
+    if (rows.length < 2) return null;
+    const best = rows.slice().sort((a, b) => b.rate - a.rate || a.attempts - b.attempts)[0];
+    const worst = rows.slice().sort((a, b) => a.rate - b.rate || b.attempts - a.attempts)[0];
+    if (best === worst) return null;
+    return { best, worst };
   }
 
   function hourHistogramHtml(hourCounts) {
@@ -257,19 +274,6 @@
     `;
   }
 
-  function daysToMaxHtml(info) {
-    if (!info) return "";
-    if (info.maxed) {
-      return nerdStatHtml(`Days to ${info.maxLevel.toUpperCase()}`, "&#9733;", "already maxed");
-    }
-    const approx = info.days >= 730 ? ` (~${(info.days / 365).toFixed(1)}y)` : info.days >= 60 ? ` (~${(info.days / 30).toFixed(1)}mo)` : "";
-    return nerdStatHtml(
-      `Days to ${info.maxLevel.toUpperCase()}`,
-      `${info.days.toFixed(1)}${approx}`,
-      `at your current pace &mdash; ~${info.remainingAttempts.toFixed(1)} attempts left, on average`
-    );
-  }
-
   function nerdStatHtml(label, value, sub) {
     return `
       <div class="nerd-stat">
@@ -280,28 +284,29 @@
     `;
   }
 
-  function nerdStatsBlockHtml(setDef, setState, acc) {
-    const n = computeNerdStats(setDef, acc);
+  // Renders the #nerd-stats-panel section — a standalone panel like Overall History, not
+  // nested inside the detail panel — for the currently selected item.
+  function renderNerdStatsPanel() {
+    const panel = document.getElementById("nerd-stats-panel");
+    const setDef = activeSetDef();
+    const setState = activeSetState();
+
+    const n = computeNerdStats(setDef, setState);
     if (!n.total) {
-      return `
-        <div class="card-block nerd-stats-block">
-          ${nerdStatsToggleHtml()}
-          ${statsForNerdsOpen ? `<div class="nerd-stats-empty">Log a few attempts to unlock these.</div>` : ""}
-        </div>
+      panel.innerHTML = `
+        ${nerdStatsToggleHtml()}
+        ${statsForNerdsOpen ? `<div class="nerd-stats-empty">Log a few attempts to unlock these.</div>` : ""}
       `;
-    }
+    } else {
+      const setLevelRows = computeSetLevelBreakdown(setDef, setState);
+      const luck = computeLuckScore(setDef, setLevelRows);
+      const leaderboard = computeSetLeaderboard(setDef, setState);
+      const levelExtremes = computeLevelExtremes(setLevelRows);
 
-    const luck = computeLuckScore(setDef, acc);
-    const leaderboard = computeSetLeaderboard(setDef, setState);
-    const daysToMax = computeDaysToMax(setDef, acc, n.pacePerDay);
-    const setLevelRows = computeSetLevelBreakdown(setDef, setState);
-
-    return `
-      <div class="card-block nerd-stats-block">
+      panel.innerHTML = `
         ${nerdStatsToggleHtml()}
         ${statsForNerdsOpen ? `
           <div class="nerd-stats-grid">
-            ${daysToMaxHtml(daysToMax)}
             ${nerdStatHtml(
               "Busiest day",
               n.busiestDay ? n.busiestDay.count : "&mdash;",
@@ -320,13 +325,15 @@
             ${luck ? nerdStatHtml(
               "Luck score",
               `${luck.score > 0 ? "+" : ""}${luck.score.toFixed(1)}`,
-              `vs average across ${luck.levelsCleared} cleared level${luck.levelsCleared === 1 ? "" : "s"} &mdash; ${luck.score < 0 ? "luckier" : luck.score > 0 ? "unluckier" : "dead on"} than average`
+              `vs average across ${luck.totalClears} clear${luck.totalClears === 1 ? "" : "s"} over ${luck.levelsCleared} level${luck.levelsCleared === 1 ? "" : "s"} &mdash; ${luck.score < 0 ? "luckier" : luck.score > 0 ? "unluckier" : "dead on"} than average`
             ) : ""}
           </div>
-          ${leaderboard ? `
+          ${leaderboard || levelExtremes ? `
             <div class="nerd-stats-grid nerd-stats-grid-2">
-              ${nerdStatHtml("Luckiest Accessory", escapeHtml(leaderboard.best.name), `${leaderboard.best.rate}% success rate`)}
-              ${nerdStatHtml("Cursed Accessory", escapeHtml(leaderboard.worst.name), `${leaderboard.worst.rate}% success rate`)}
+              ${leaderboard ? nerdStatHtml("Luckiest Accessory", escapeHtml(leaderboard.best.name), `${leaderboard.best.rate}% success rate`) : ""}
+              ${leaderboard ? nerdStatHtml("Cursed Accessory", escapeHtml(leaderboard.worst.name), `${leaderboard.worst.rate}% success rate`) : ""}
+              ${levelExtremes ? nerdStatHtml("Best Enhance Level", levelExtremes.best.level.toUpperCase(), `${levelExtremes.best.rate}% success rate`) : ""}
+              ${levelExtremes ? nerdStatHtml("Worst Enhance Level", levelExtremes.worst.level.toUpperCase(), `${levelExtremes.worst.rate}% success rate`) : ""}
             </div>
           ` : ""}
           <div class="nerd-stats-caption">Attempts by hour of day</div>
@@ -338,8 +345,13 @@
             </div>
           ` : ""}
         ` : ""}
-      </div>
-    `;
+      `;
+    }
+
+    document.getElementById("btn-toggle-nerd-stats").addEventListener("click", () => {
+      statsForNerdsOpen = !statsForNerdsOpen;
+      renderNerdStatsPanel();
+    });
   }
 
   function nerdStatsToggleHtml() {
@@ -888,6 +900,7 @@
     const normal = !overview && !overlays;
     document.getElementById("accessory-grid").style.display = normal ? "" : "none";
     document.getElementById("detail-panel").style.display = normal ? "" : "none";
+    document.getElementById("nerd-stats-panel").style.display = normal ? "" : "none";
     document.getElementById("overall-panel").style.display = normal ? "" : "none";
     document.getElementById("overview-panel").style.display = overview ? "block" : "none";
     document.getElementById("overlays-panel").style.display = overlays ? "block" : "none";
@@ -898,6 +911,7 @@
     } else {
       renderGrid();
       renderDetail();
+      renderNerdStatsPanel();
       renderOverallHistory();
     }
   }
@@ -1159,8 +1173,6 @@
       </div>
       ` : ""}
 
-      ${nerdStatsBlockHtml(setDef, setState, acc)}
-
       <div class="history-section">
         <h3>History (${acc.log.length})</h3>
         <div class="history-list" id="history-list">
@@ -1196,10 +1208,6 @@
     });
     document.getElementById("btn-share-card").addEventListener("click", () => {
       generateShareCard(setDef, acc, iconSrc, { total, successes, pity, fails, rate }, maxed, target);
-    });
-    document.getElementById("btn-toggle-nerd-stats").addEventListener("click", () => {
-      statsForNerdsOpen = !statsForNerdsOpen;
-      renderDetail();
     });
   }
 

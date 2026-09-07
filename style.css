@@ -1379,8 +1379,12 @@ select, input[type=number] {
 
 /* ---------- Stats for Nerds ---------- */
 
-.nerd-stats-block {
-  margin-bottom: 24px;
+.nerd-stats-panel {
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-top: 20px;
 }
 
 .nerd-stats-toggle {
