@@ -7,6 +7,24 @@
   // Manually maintained, newest first. Add an entry here whenever a change ships.
   const CHANGELOG = [
     {
+      date: "2026-09-07",
+      title: "Bigger, more detailed share cards",
+      items: [
+        "The share card now includes the item's icon (with its roman-numeral level, matching everywhere else in the app) and a full Rates by Level breakdown.",
+        "Clicking Share Card now opens a preview in a new tab with its own Download PNG button, instead of downloading immediately.",
+        "Made the card noticeably more compact overall, with its height now based on how much you've actually logged instead of a fixed size that left empty space.",
+        "Fixed long level names (like Alchemy's Shining) overlapping neighboring text in the Rates by Level rows and overflowing the icon circle.",
+      ],
+    },
+    {
+      date: "2026-09-06",
+      title: "Attempts-by-hour chart is taller and shows percentages",
+      items: [
+        "The Stats for Nerds hour-of-day chart is taller, with a labeled Y-axis and the exact value shown above each bar in white.",
+        "Bars now show the percentage of your total attempts that happened in that hour, instead of a raw count.",
+      ],
+    },
+    {
       date: "2026-09-06",
       title: "Stats for Nerds is now cumulative, not per-item",
       items: [
@@ -266,9 +284,25 @@
 
   function hourHistogramHtml(hourCounts) {
     const max = Math.max(1, ...hourCounts);
+    const total = hourCounts.reduce((a, b) => a + b, 0) || 1;
+    const pctOf = (c) => Math.round((c / total) * 100);
+    const maxPct = pctOf(max);
+    // Cap bars at 80% of the chart height (rather than 100%) so the busiest hour's count label
+    // always has headroom above it instead of getting clipped at the top of the chart.
     return `
-      <div class="nerd-histogram" title="Attempts logged by hour of day (your local time)">
-        ${hourCounts.map((c) => `<div class="nerd-histogram-bar" style="height:${Math.round((c / max) * 100)}%" title="${c} at this hour"></div>`).join("")}
+      <div class="nerd-histogram-chart">
+        <div class="nerd-histogram-yaxis">
+          <span class="nerd-histogram-ylabel">% of Attempts</span>
+          <div class="nerd-histogram-yticks"><span>${maxPct}%</span><span>0%</span></div>
+        </div>
+        <div class="nerd-histogram" title="Share of attempts logged by hour of day (your local time)">
+          ${hourCounts.map((c) => `
+            <div class="nerd-histogram-col">
+              ${c > 0 ? `<span class="nerd-histogram-count" style="bottom:${Math.round((c / max) * 80)}%">${pctOf(c)}%</span>` : ""}
+              <div class="nerd-histogram-bar" style="height:${Math.round((c / max) * 80)}%" title="${pctOf(c)}% of attempts (${c}) at this hour"></div>
+            </div>
+          `).join("")}
+        </div>
       </div>
       <div class="nerd-histogram-labels"><span>12am</span><span>12pm</span><span>11pm</span></div>
     `;
@@ -1207,7 +1241,7 @@
       btn.addEventListener("click", () => deleteHistoryEntry(acc.id, btn.dataset.id));
     });
     document.getElementById("btn-share-card").addEventListener("click", () => {
-      generateShareCard(setDef, acc, iconSrc, { total, successes, pity, fails, rate }, maxed, target);
+      generateShareCard(setDef, acc, iconSrc, { total, successes, pity, fails, rate }, maxed, target, levelRows);
     });
   }
 
@@ -1502,110 +1536,280 @@
   }
 
   // ---------- Shareable summary card (Canvas -> PNG download) ----------
-  // Text/vector only (no drawn images) so the canvas never gets tainted by a file:// image
-  // load, which would otherwise block toBlob() when the app is opened directly from disk.
-  function generateShareCard(setDef, acc, iconSrc, stats, maxed, target) {
-    const accent = THEME_ACCENT[setDef.theme] || THEME_ACCENT.purple;
-    const W = 900, H = 460;
-    const canvas = document.createElement("canvas");
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext("2d");
 
-    const bgGrad = ctx.createLinearGradient(0, 0, W, H);
-    bgGrad.addColorStop(0, "#15111c");
-    bgGrad.addColorStop(1, "#1f1828");
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = 6;
-    ctx.strokeRect(3, 3, W - 6, H - 6);
-
-    ctx.fillStyle = accent;
-    ctx.font = "700 22px Georgia, serif";
-    ctx.fillText(setDef.label.toUpperCase(), 48, 62);
-
-    ctx.fillStyle = "#f2ecf7";
-    ctx.font = "700 46px Georgia, serif";
-    ctx.fillText(acc.name, 48, 128);
-
-    const cx = W - 140, cy = 118, r = 78;
-    const circGrad = ctx.createRadialGradient(cx, cy - 20, 10, cx, cy, r);
-    circGrad.addColorStop(0, accent);
-    circGrad.addColorStop(1, "#000");
-    ctx.globalAlpha = 0.35;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = circGrad;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = accent;
-    ctx.stroke();
-
-    ctx.fillStyle = "#fff";
-    ctx.font = "700 38px Georgia, serif";
-    ctx.textAlign = "center";
-    ctx.fillText(acc.currentLevel.toUpperCase(), cx, cy + 12);
-    ctx.textAlign = "left";
-
-    if (maxed) {
-      ctx.fillStyle = "#f0d878";
-      ctx.font = "700 26px Georgia, serif";
-      ctx.fillText("★ MAX LEVEL REACHED", 48, 172);
-    } else {
-      ctx.fillStyle = "#c3b6d1";
-      ctx.font = "20px -apple-system, Segoe UI, sans-serif";
-      ctx.fillText(`Working toward ${target.toUpperCase()}`, 48, 172);
-    }
-
-    const statsList = [
-      ["Attempts", stats.total],
-      ["Successes", stats.successes],
-      ["Pity", stats.pity],
-      ["Fails", stats.fails],
-      ["Success Rate", stats.rate + "%"],
-    ];
-    const statW = (W - 96) / statsList.length;
-    statsList.forEach(([label, val], i) => {
-      const x = 48 + i * statW;
-      ctx.fillStyle = "#8d7f9d";
-      ctx.font = "600 14px -apple-system, Segoe UI, sans-serif";
-      ctx.fillText(label.toUpperCase(), x, 248);
-      ctx.fillStyle = "#f2ecf7";
-      ctx.font = "700 34px Georgia, serif";
-      ctx.fillText(String(val), x, 290);
+  function loadImage(src) {
+    return new Promise((resolve) => {
+      if (!src) { resolve(null); return; }
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = src;
     });
+  }
 
+  async function generateShareCard(setDef, acc, iconSrc, stats, maxed, target, levelRows) {
+    // Opened synchronously (still inside the click handler's call stack, before any await) so
+    // browsers treat it as a direct result of the user's click rather than an unsolicited
+    // popup. Filled in with the real content further down once the canvas is ready.
+    const win = window.open("", "_blank");
+    if (!win) {
+      showToast("Could not open the preview — check your popup blocker");
+      return;
+    }
+    win.document.write(`<!DOCTYPE html><title>Generating&hellip;</title><body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#0d0a12;color:#8d7f9d;font-family:-apple-system,'Segoe UI',sans-serif;">Generating share card&hellip;</body>`);
+    win.document.close();
+
+    const iconImg = await loadImage(iconSrc);
+    if (win.closed) return;
+
+    const accent = THEME_ACCENT[setDef.theme] || THEME_ACCENT.purple;
     const cur = currentFailStreak(acc.log, setDef.pityThreshold);
     const longest = longestFailStreak(acc.log, setDef.pityThreshold);
-    if (longest > 0) {
-      ctx.fillStyle = "#f0827d";
-      ctx.font = "600 18px -apple-system, Segoe UI, sans-serif";
-      const streakText = cur > 0
-        ? `Current fail streak: ${cur}  •  Longest fail streak: ${longest}`
-        : `Longest fail streak: ${longest}`;
-      ctx.fillText(streakText, 48, 335);
+
+    // Compact, dynamically-sized layout: a left-column cursor advances only as far as the
+    // content actually drawn (e.g. no streak line -> no leftover gap before Rates by Level),
+    // instead of every section living at a fixed offset sized for the worst case.
+    const W = 720;
+    const M = 36;
+    let cursorY = 154; // below the header block (name + circle badge)
+    cursorY += 60; // stats row
+    if (longest > 0) cursorY += 34; // streak line
+    const ratesTop = cursorY + 20;
+    const ratesRowH = 26;
+    const ratesBlockH = levelRows.length ? 22 + levelRows.length * ratesRowH + 8 : 0;
+    const H = (levelRows.length ? ratesTop + ratesBlockH : cursorY + 4) + 40;
+
+    // Draws the whole card onto a brand-new canvas and returns it. Tainting (from drawing a
+    // local file:// icon without image access) is permanent for a given canvas element once it
+    // happens -- retrying toDataURL() on the SAME canvas after removing the icon would still
+    // fail, so the icon-less fallback below draws on a fresh canvas instead of reusing this one.
+    function draw(withIcon) {
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d");
+
+      const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+      bgGrad.addColorStop(0, "#15111c");
+      bgGrad.addColorStop(1, "#1f1828");
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 5;
+      ctx.strokeRect(3, 3, W - 6, H - 6);
+
+      ctx.fillStyle = accent;
+      ctx.font = "700 17px Georgia, serif";
+      ctx.fillText(setDef.label.toUpperCase(), M, 46);
+
+      ctx.fillStyle = "#f2ecf7";
+      ctx.font = "700 32px Georgia, serif";
+      ctx.fillText(acc.name, M, 84);
+
+      const cx = W - 90, cy = 78, r = 56;
+      const circGrad = ctx.createRadialGradient(cx, cy - 16, 8, cx, cy, r);
+      circGrad.addColorStop(0, accent);
+      circGrad.addColorStop(1, "#000");
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = circGrad;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = accent;
+      ctx.stroke();
+
+      if (withIcon && iconImg) {
+        const size = 66;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r - 8, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(iconImg, cx - size / 2, cy - size / 2, size, size);
+        ctx.restore();
+      }
+
+      const numeral = romanNumeralFor(acc.currentLevel);
+      ctx.textAlign = "center";
+      if (numeral) {
+        // White text with a black outline, same convention as the roman-numeral badges
+        // painted over icons everywhere else in the app.
+        ctx.font = "700 24px Georgia, serif";
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "#000";
+        ctx.lineJoin = "round";
+        ctx.strokeText(numeral, cx, cy + 8);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(numeral, cx, cy + 8);
+      } else {
+        // Level names without a roman numeral vary a lot in length (Base, Shining, ...) --
+        // shrink the font until it fits the circle instead of letting long ones overflow it.
+        const label = acc.currentLevel.toUpperCase();
+        const maxWidth = (r - 14) * 2;
+        let fontSize = 26;
+        ctx.font = `700 ${fontSize}px Georgia, serif`;
+        while (ctx.measureText(label).width > maxWidth && fontSize > 12) {
+          fontSize -= 2;
+          ctx.font = `700 ${fontSize}px Georgia, serif`;
+        }
+        ctx.fillStyle = "#fff";
+        ctx.fillText(label, cx, cy + fontSize / 3);
+      }
+      ctx.textAlign = "left";
+
+      if (maxed) {
+        ctx.fillStyle = "#f0d878";
+        ctx.font = "700 20px Georgia, serif";
+        ctx.fillText("★ MAX LEVEL REACHED", M, 120);
+      } else {
+        ctx.fillStyle = "#c3b6d1";
+        ctx.font = "16px -apple-system, Segoe UI, sans-serif";
+        ctx.fillText(`Working toward ${target.toUpperCase()}`, M, 120);
+      }
+
+      const statsList = [
+        ["Attempts", stats.total],
+        ["Successes", stats.successes],
+        ["Pity", stats.pity],
+        ["Fails", stats.fails],
+        ["Success Rate", stats.rate + "%"],
+      ];
+      const statW = (W - M * 2) / statsList.length;
+      const statLabelY = 154, statValY = 184;
+      statsList.forEach(([label, val], i) => {
+        const x = M + i * statW;
+        ctx.fillStyle = "#8d7f9d";
+        ctx.font = "600 12px -apple-system, Segoe UI, sans-serif";
+        ctx.fillText(label.toUpperCase(), x, statLabelY);
+        ctx.fillStyle = "#f2ecf7";
+        ctx.font = "700 26px Georgia, serif";
+        ctx.fillText(String(val), x, statValY);
+      });
+
+      let y = statValY + 30;
+      if (longest > 0) {
+        ctx.fillStyle = "#f0827d";
+        ctx.font = "600 15px -apple-system, Segoe UI, sans-serif";
+        const streakText = cur > 0
+          ? `Current fail streak: ${cur}  •  Longest fail streak: ${longest}`
+          : `Longest fail streak: ${longest}`;
+        ctx.fillText(streakText, M, y);
+        y += 34;
+      }
+
+      if (levelRows.length) {
+        ctx.fillStyle = "#8d7f9d";
+        ctx.font = "700 12px -apple-system, Segoe UI, sans-serif";
+        ctx.fillText("RATES BY LEVEL", M, ratesTop);
+
+        // Level names vary hugely in width across sets (PRI/DEC vs. Alchemy's SHINING/
+        // RESPLENDENT), so the later columns can't sit at a fixed offset without either
+        // overlapping long names or wasting space for short ones -- size the level column to
+        // whatever's actually the longest name in THIS card instead.
+        ctx.font = "700 13px Georgia, serif";
+        const levelColW = Math.max(...levelRows.map((r) => ctx.measureText(r.level.toUpperCase()).width));
+        const colTaps = M + levelColW + 26;
+        const colSuccess = colTaps + 66;
+        const colPity = colSuccess + 110;
+        const colFail = colPity + 70;
+
+        levelRows.forEach((r, i) => {
+          const ry = ratesTop + 22 + i * ratesRowH;
+          ctx.fillStyle = "rgba(255,255,255,0.04)";
+          ctx.fillRect(M, ry - 16, W - M * 2, 22);
+
+          ctx.fillStyle = accent;
+          ctx.font = "700 13px Georgia, serif";
+          ctx.fillText(r.level.toUpperCase(), M + 10, ry);
+
+          ctx.font = "12px -apple-system, Segoe UI, sans-serif";
+          ctx.fillStyle = "#c3b6d1";
+          ctx.fillText(`${r.attempts} taps`, colTaps, ry);
+          ctx.fillStyle = "#4caf7d";
+          ctx.fillText(`${r.successes} success${r.successes === 1 ? "" : "es"}`, colSuccess, ry);
+          ctx.fillStyle = "#5aa9e6";
+          ctx.fillText(`${r.pity} pity`, colPity, ry);
+          ctx.fillStyle = "#e0645f";
+          ctx.fillText(`${r.fails} fail${r.fails === 1 ? "" : "s"}`, colFail, ry);
+
+          ctx.fillStyle = "#f2ecf7";
+          ctx.font = "700 13px Georgia, serif";
+          ctx.textAlign = "right";
+          ctx.fillText(`${r.rate}%`, W - M - 10, ry);
+          ctx.textAlign = "left";
+        });
+      }
+
+      ctx.fillStyle = "#5a4f66";
+      ctx.font = "12px -apple-system, Segoe UI, sans-serif";
+      ctx.fillText("Enhancement Tracker", M, H - 20);
+      ctx.textAlign = "right";
+      ctx.fillText(new Date().toLocaleDateString(), W - M, H - 20);
+      ctx.textAlign = "left";
+      return canvas;
     }
 
-    ctx.fillStyle = "#5a4f66";
-    ctx.font = "13px -apple-system, Segoe UI, sans-serif";
-    ctx.fillText("Enhancement Tracker", 48, H - 28);
-    ctx.textAlign = "right";
-    ctx.fillText(new Date().toLocaleDateString(), W - 48, H - 28);
-    ctx.textAlign = "left";
+    let dataUrl;
+    try {
+      dataUrl = draw(true).toDataURL("image/png");
+    } catch (e) {
+      // Drawing the icon tainted the canvas (e.g. file:// without local image access) --
+      // a fresh canvas without it will export fine instead of failing the whole share card.
+      dataUrl = draw(false).toDataURL("image/png");
+    }
 
-    canvas.toBlob((blob) => {
-      if (!blob) { showToast("Could not generate share card"); return; }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${setDef.label}-${acc.name}-share-card.png`.replace(/\s+/g, "-").toLowerCase();
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast("Share card downloaded");
-    }, "image/png");
+    if (win.closed) return;
+    const filename = `${setDef.label}-${acc.name}-share-card.png`.replace(/\s+/g, "-").toLowerCase();
+    win.document.open();
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>${escapeHtml(acc.name)} Share Card</title>
+        <style>
+          html, body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            background: #0d0a12;
+            font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+            padding: 32px;
+            box-sizing: border-box;
+          }
+          img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+          }
+          a.download-btn {
+            background: linear-gradient(135deg, #7c4dbd, #a875e0);
+            color: #17101f;
+            font-weight: 700;
+            padding: 12px 28px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.95rem;
+            font-family: inherit;
+          }
+          a.download-btn:hover { filter: brightness(1.1); }
+        </style>
+      </head>
+      <body>
+        <img src="${dataUrl}" alt="${escapeHtml(acc.name)} share card preview">
+        <a class="download-btn" href="${dataUrl}" download="${filename}">Download PNG</a>
+      </body>
+      </html>
+    `);
+    win.document.close();
+    showToast("Share card preview opened in a new tab");
   }
 
   // ---------- Export / Import / Reset ----------

@@ -1462,22 +1462,75 @@ select, input[type=number] {
   margin-bottom: 6px;
 }
 
+.nerd-histogram-chart {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.nerd-histogram-yaxis {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.nerd-histogram-ylabel {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.nerd-histogram-yticks {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  font-size: 0.68rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 .nerd-histogram {
+  flex: 1;
   display: flex;
   align-items: flex-end;
   gap: 2px;
-  height: 40px;
+  height: 140px;
   background: var(--panel-3);
   border: 1px solid var(--border-soft);
   border-radius: 6px;
   padding: 4px 6px;
 }
 
-.nerd-histogram-bar {
+.nerd-histogram-col {
   flex: 1;
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.nerd-histogram-count {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 4px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.nerd-histogram-bar {
+  width: 100%;
   min-height: 2px;
   background: linear-gradient(180deg, var(--accent), var(--accent-dim));
-  border-radius: 1px;
+  border-radius: 2px 2px 0 0;
 }
 
 .nerd-histogram-labels {
@@ -1486,6 +1539,7 @@ select, input[type=number] {
   font-size: 0.65rem;
   color: var(--text-faint);
   margin-top: 3px;
+  padding-left: 46px;
 }
 
 /* ---------- Lifetime totals (Overview tab) ---------- */
