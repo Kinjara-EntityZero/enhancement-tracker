@@ -40,6 +40,16 @@
         Pri: 2.96, Duo: 3.34, Tri: 3.64, Tet: 3.69, Pen: 4.61,
         Hex: 5.36, Sep: 5.76, Oct: 7.09, Nov: 8.86, Dec: 13.39
       },
+      // Cron Stones consumed per attempt (fail or genuine success) targeting each level, keyed
+      // the same way as pityThreshold/avgAttempts. A pity-guaranteed success costs 0 regardless
+      // of level, since there's no fail risk left to protect against — handled by the code that
+      // reads this, not by anything here. Optional per set (varies a lot between gear types, and
+      // Alchemy Stones don't use crons at all) — sets without this field just skip the Cron
+      // Stones section entirely.
+      cronCost: {
+        Pri: 0, Duo: 290, Tri: 590, Tet: 960, Pen: 1150,
+        Hex: 1420, Sep: 1580, Oct: 1780, Nov: 2790, Dec: 3130
+      },
       accessories: [
         { id: "ring1", name: "Ring 1", type: "ring", icon: "Images/Ekleta/ring.png" },
         { id: "ring2", name: "Ring 2", type: "ring", icon: "Images/Ekleta/ring.png" },

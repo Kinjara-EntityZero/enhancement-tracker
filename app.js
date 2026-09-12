@@ -7,6 +7,15 @@
   // Manually maintained, newest first. Add an entry here whenever a change ships.
   const CHANGELOG = [
     {
+      date: "2026-09-12",
+      title: "Cron Stones used (Ekleta)",
+      items: [
+        "Stats for Nerds now tracks Cron Stones: a box for each level showing how many were spent there, plus a Total Crons Used box, across every accessory in the set combined.",
+        "A pity-guaranteed click always costs 0 Crons, same as in game, since there's no fail risk left to protect against.",
+        "Built to extend to other gear sets later (each just needs its own cron-cost table) — Alchemy Stones don't use Crons at all, so they're skipped entirely.",
+      ],
+    },
+    {
       date: "2026-09-07",
       title: "Bigger, more detailed share cards",
       items: [
@@ -282,6 +291,26 @@
     return { best, worst };
   }
 
+  // Cron Stones consumed per level (and the running total), across every accessory in the set
+  // combined. A pity-guaranteed click costs 0, so only successes+fails (== attempts - pity)
+  // at a level actually spend crons -- derived straight from the already-computed
+  // setLevelRows rather than re-scanning raw logs. Optional per set (setDef.cronCost) so this
+  // naturally only shows up where it's been configured (currently just Ekleta).
+  function computeCronStats(setDef, setLevelRows) {
+    if (!setDef.cronCost) return null;
+    const perLevel = setLevelRows
+      .map((r) => {
+        const cost = setDef.cronCost[r.level];
+        if (cost == null) return null;
+        const clicks = r.successes + r.fails;
+        return { level: r.level, cost, clicks, crons: cost * clicks };
+      })
+      .filter(Boolean);
+    if (!perLevel.length) return null;
+    const total = perLevel.reduce((sum, p) => sum + p.crons, 0);
+    return { perLevel, total };
+  }
+
   function hourHistogramHtml(hourCounts) {
     const max = Math.max(1, ...hourCounts);
     const total = hourCounts.reduce((a, b) => a + b, 0) || 1;
@@ -336,6 +365,7 @@
       const luck = computeLuckScore(setDef, setLevelRows);
       const leaderboard = computeSetLeaderboard(setDef, setState);
       const levelExtremes = computeLevelExtremes(setLevelRows);
+      const cronStats = computeCronStats(setDef, setLevelRows);
 
       panel.innerHTML = `
         ${nerdStatsToggleHtml()}
@@ -376,6 +406,21 @@
             <div class="nerd-stats-caption">Rates by level &mdash; all ${categoryLabel(setDef)} combined</div>
             <div class="level-rates-list">
               ${setLevelRows.map((r) => levelRateRowHtml(setDef, r)).join("")}
+            </div>
+          ` : ""}
+          ${cronStats ? `
+            <div class="nerd-stats-caption">Cron Stones used &mdash; all ${categoryLabel(setDef)} combined</div>
+            <div class="nerd-stats-grid">
+              ${nerdStatHtml(
+                "Total Crons Used",
+                cronStats.total.toLocaleString(),
+                `across ${cronStats.perLevel.reduce((sum, p) => sum + p.clicks, 0)} paid click${cronStats.perLevel.reduce((sum, p) => sum + p.clicks, 0) === 1 ? "" : "s"}`
+              )}
+              ${cronStats.perLevel.map((p) => nerdStatHtml(
+                `${p.level.toUpperCase()} Crons`,
+                p.crons.toLocaleString(),
+                `${p.clicks} click${p.clicks === 1 ? "" : "s"} &times; ${p.cost.toLocaleString()} each`
+              )).join("")}
             </div>
           ` : ""}
         ` : ""}
