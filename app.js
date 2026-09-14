@@ -7,6 +7,24 @@
   // Manually maintained, newest first. Add an entry here whenever a change ships.
   const CHANGELOG = [
     {
+      date: "2026-09-14",
+      title: "Import and Link Save File now warn you about which copy is newer",
+      items: [
+        "Every save is now timestamped, in both localStorage and your linked save file.",
+        "Importing a backup, or linking/reconnecting to a file that already has data, now shows when each copy was last saved and flags which one is newer before you commit to overwriting anything.",
+        "Importing a backup now asks for confirmation at all — previously it silently overwrote your current data with no warning.",
+      ],
+    },
+    {
+      date: "2026-09-14",
+      title: "Hour-of-day chart is now one combined graph with hover details",
+      items: [
+        "Attempts by hour of day is now a single stacked bar chart — each bar splits into red (fails), blue (pity), and green (successes) — instead of three separate charts, with a color-key legend above it.",
+        "Bars and the Y-axis now show raw counts instead of percentages.",
+        "Hovering a bar (or an empty hour) now shows an instant tooltip with the full fail/pity/success breakdown for that hour, plus a subtle highlight — no more waiting on the browser's slow native tooltip.",
+      ],
+    },
+    {
       date: "2026-09-12",
       title: "Cron Stones used (Ekleta)",
       items: [
@@ -239,9 +257,18 @@
     const pacePerDay = real.length ? real.length / Math.max(1, dayCounts.size) : 0;
 
     const hourCounts = new Array(24).fill(0);
-    real.forEach((e) => hourCounts[new Date(e.timestamp).getHours()]++);
+    const hourCountsSuccess = new Array(24).fill(0);
+    const hourCountsFail = new Array(24).fill(0);
+    const hourCountsPity = new Array(24).fill(0);
+    real.forEach((e) => {
+      const h = new Date(e.timestamp).getHours();
+      hourCounts[h]++;
+      if (e.type === "fail") hourCountsFail[h]++;
+      else if (isPityEntry(e, setDef.pityThreshold)) hourCountsPity[h]++;
+      else hourCountsSuccess[h]++;
+    });
 
-    return { total: real.length, busiestDay, longestGapMs, elapsedDays, activeDays: dayCounts.size, pacePerDay, hourCounts };
+    return { total: real.length, busiestDay, longestGapMs, elapsedDays, activeDays: dayCounts.size, pacePerDay, hourCounts, hourCountsSuccess, hourCountsFail, hourCountsPity };
   }
 
   // Which piece in the current set has the best/worst success rate, so far — needs at least
@@ -311,30 +338,101 @@
     return { perLevel, total };
   }
 
-  function hourHistogramHtml(hourCounts) {
-    const max = Math.max(1, ...hourCounts);
-    const total = hourCounts.reduce((a, b) => a + b, 0) || 1;
-    const pctOf = (c) => Math.round((c / total) * 100);
-    const maxPct = pctOf(max);
+  // "3 PM" / "12 AM" style label for an hour index (0-23), used in hover tooltips.
+  function hourLabel(h) {
+    const period = h < 12 ? "AM" : "PM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12} ${period}`;
+  }
+
+  // One combined chart: each hour's bar is stacked fail (bottom) / pity (middle) / success (top),
+  // scaled against the busiest hour's total attempts. Segment heights are set via flex-grow
+  // equal to that segment's raw count, so within a bar of fixed total height the three pieces
+  // divide up proportionally without a second round of percent math.
+  //
+  // Hover tooltips: native `title` attributes have a ~1s delay before the browser shows them and
+  // felt like "nothing happens" while testing, so instead every column (and each colored segment
+  // within it) carries a `data-tooltip` string that a shared floating tooltip (see
+  // attachHistogramTooltips below) shows INSTANTLY on mouseenter, following the cursor. The column
+  // covers the whole hour slot -- including empty hours with no bar at all -- with the full
+  // breakdown; a segment's own data-tooltip is more specific and simply wins while the cursor is
+  // directly over it, since mouseenter/mouseleave don't bubble.
+  function stackedHourHistogramHtml(hourCountsFail, hourCountsPity, hourCountsSuccess) {
+    const totals = hourCountsFail.map((f, i) => f + hourCountsPity[i] + hourCountsSuccess[i]);
+    const max = Math.max(1, ...totals);
     // Cap bars at 80% of the chart height (rather than 100%) so the busiest hour's count label
     // always has headroom above it instead of getting clipped at the top of the chart.
     return `
+      <div class="nerd-histogram-legend">
+        <span class="nerd-histogram-legend-item"><span class="nerd-histogram-swatch nerd-histogram-bar-fail"></span>Fails</span>
+        <span class="nerd-histogram-legend-item"><span class="nerd-histogram-swatch nerd-histogram-bar-pity"></span>Pity</span>
+        <span class="nerd-histogram-legend-item"><span class="nerd-histogram-swatch nerd-histogram-bar-success"></span>Successes</span>
+      </div>
       <div class="nerd-histogram-chart">
         <div class="nerd-histogram-yaxis">
-          <span class="nerd-histogram-ylabel">% of Attempts</span>
-          <div class="nerd-histogram-yticks"><span>${maxPct}%</span><span>0%</span></div>
+          <span class="nerd-histogram-ylabel">Attempts</span>
+          <div class="nerd-histogram-yticks"><span>${max}</span><span>0</span></div>
         </div>
-        <div class="nerd-histogram" title="Share of attempts logged by hour of day (your local time)">
-          ${hourCounts.map((c) => `
-            <div class="nerd-histogram-col">
-              ${c > 0 ? `<span class="nerd-histogram-count" style="bottom:${Math.round((c / max) * 80)}%">${pctOf(c)}%</span>` : ""}
-              <div class="nerd-histogram-bar" style="height:${Math.round((c / max) * 80)}%" title="${pctOf(c)}% of attempts (${c}) at this hour"></div>
-            </div>
-          `).join("")}
+        <div class="nerd-histogram">
+          ${totals.map((total, h) => {
+            const f = hourCountsFail[h];
+            const p = hourCountsPity[h];
+            const s = hourCountsSuccess[h];
+            const stackPct = Math.round((total / max) * 80);
+            const colTip = `${hourLabel(h)} — ${f} fail${f === 1 ? "" : "s"}, ${p} pity, ${s} success${s === 1 ? "" : "es"} (${total} total)`;
+            return `
+              <div class="nerd-histogram-col" data-tooltip="${escapeHtml(colTip)}">
+                ${total > 0 ? `<span class="nerd-histogram-count" style="bottom:${stackPct}%">${total}</span>` : ""}
+                <div class="nerd-histogram-stack" style="height:${stackPct}%">
+                  ${f > 0 ? `<div class="nerd-histogram-bar nerd-histogram-bar-fail" style="flex:${f} 0 0%" data-tooltip="${escapeHtml(`${hourLabel(h)}: ${f} fail${f === 1 ? "" : "s"}`)}"></div>` : ""}
+                  ${p > 0 ? `<div class="nerd-histogram-bar nerd-histogram-bar-pity" style="flex:${p} 0 0%" data-tooltip="${escapeHtml(`${hourLabel(h)}: ${p} pity`)}"></div>` : ""}
+                  ${s > 0 ? `<div class="nerd-histogram-bar nerd-histogram-bar-success" style="flex:${s} 0 0%" data-tooltip="${escapeHtml(`${hourLabel(h)}: ${s} success${s === 1 ? "" : "es"}`)}"></div>` : ""}
+                </div>
+              </div>
+            `;
+          }).join("")}
         </div>
       </div>
       <div class="nerd-histogram-labels"><span>12am</span><span>12pm</span><span>11pm</span></div>
     `;
+  }
+
+  // Shared floating tooltip for the hour-of-day chart -- created once, reused, and repositioned
+  // next to the cursor. Delegates a single set of listeners from the chart container instead of
+  // binding 24+ columns x 3 segments individually, and re-runs harmlessly on every re-render.
+  let nerdHistogramTooltipEl = null;
+  function attachHistogramTooltips(container) {
+    if (!nerdHistogramTooltipEl) {
+      nerdHistogramTooltipEl = document.createElement("div");
+      nerdHistogramTooltipEl.className = "nerd-histogram-tooltip";
+      document.body.appendChild(nerdHistogramTooltipEl);
+    }
+    const tip = nerdHistogramTooltipEl;
+    const chart = container.querySelector(".nerd-histogram");
+    if (!chart) return;
+
+    const show = (e) => {
+      const target = e.target.closest("[data-tooltip]");
+      if (!target || !chart.contains(target)) return;
+      tip.textContent = target.getAttribute("data-tooltip");
+      tip.style.display = "block";
+      position(e);
+    };
+    const position = (e) => {
+      const pad = 14;
+      let x = e.clientX + pad;
+      let y = e.clientY + pad;
+      const rect = tip.getBoundingClientRect();
+      if (x + rect.width > window.innerWidth - 8) x = e.clientX - rect.width - pad;
+      if (y + rect.height > window.innerHeight - 8) y = e.clientY - rect.height - pad;
+      tip.style.left = `${x}px`;
+      tip.style.top = `${y}px`;
+    };
+    const hide = () => { tip.style.display = "none"; };
+
+    chart.addEventListener("mouseover", show);
+    chart.addEventListener("mousemove", (e) => { if (tip.style.display === "block") position(e); });
+    chart.addEventListener("mouseleave", hide);
   }
 
   function nerdStatHtml(label, value, sub) {
@@ -401,7 +499,7 @@
             </div>
           ` : ""}
           <div class="nerd-stats-caption">Attempts by hour of day</div>
-          ${hourHistogramHtml(n.hourCounts)}
+          ${stackedHourHistogramHtml(n.hourCountsFail, n.hourCountsPity, n.hourCountsSuccess)}
           ${setLevelRows.length ? `
             <div class="nerd-stats-caption">Rates by level &mdash; all ${categoryLabel(setDef)} combined</div>
             <div class="level-rates-list">
@@ -425,6 +523,7 @@
           ` : ""}
         ` : ""}
       `;
+      if (statsForNerdsOpen) attachHistogramTooltips(panel);
     }
 
     document.getElementById("btn-toggle-nerd-stats").addEventListener("click", () => {
@@ -633,9 +732,32 @@
     });
   }
 
+  // Stamped on every real change, in localStorage AND (via queueFileSync) the linked file --
+  // lets import/link/reconnect compare "which copy is actually newer" instead of guessing.
   function save() {
+    state.savedAt = Date.now();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     queueFileSync();
+  }
+
+  function formatSavedAt(ts) {
+    if (!ts) return "unknown";
+    return new Date(ts).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  }
+
+  // Builds the "which one is newer" block used in both the manual Import confirm and the
+  // link/reconnect-to-an-existing-file confirm. Falls back to a plain "can't compare" note when
+  // either side predates this feature (no savedAt) or was never saved at all.
+  function savedAtComparisonText(currentTs, otherTs, otherLabel) {
+    if (!currentTs || !otherTs) return "(Save time unknown for one or both — unable to compare.)";
+    const lines = [
+      `Current data last saved: ${formatSavedAt(currentTs)}`,
+      `${otherLabel} last saved: ${formatSavedAt(otherTs)}`,
+    ];
+    if (otherTs > currentTs) lines.push(`${otherLabel} is NEWER.`);
+    else if (otherTs < currentTs) lines.push("Your current data is NEWER.");
+    else lines.push("Both were saved at the same time.");
+    return lines.join("\n");
   }
 
   // ---------- Linked save file (File System Access API) ----------
@@ -742,8 +864,10 @@
     const looksLikeTrackerData = parsed && (parsed.sets || parsed.accessories);
 
     if (looksLikeTrackerData) {
+      const comparison = savedAtComparisonText(state.savedAt, parsed.savedAt, "The file's data");
       const useExisting = confirm(
         "That file already has enhancement tracker data in it.\n\n" +
+        comparison + "\n\n" +
         "OK — load that file's data into this tracker (use it as your save).\n" +
         "Cancel — keep what's currently shown here, and overwrite the file with it instead."
       );
@@ -1883,6 +2007,13 @@
       try {
         const parsed = JSON.parse(reader.result);
         if (!parsed || (!parsed.accessories && !parsed.sets)) throw new Error("invalid file");
+        const comparison = savedAtComparisonText(state.savedAt, parsed.savedAt, "This file");
+        const proceed = confirm(
+          "Import this file and replace what's currently loaded here?\n\n" +
+          comparison + "\n\n" +
+          "OK — import and overwrite. Cancel — keep your current data."
+        );
+        if (!proceed) { showToast("Import canceled"); return; }
         state = normalizeState(parsed);
         save();
         render();
