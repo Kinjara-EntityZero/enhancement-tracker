@@ -7,6 +7,23 @@
   // Manually maintained, newest first. Add an entry here whenever a change ships.
   const CHANGELOG = [
     {
+      date: "2026-09-17",
+      title: "Rates by Level columns now actually line up",
+      items: [
+        "Taps/successes/pity/fails/avg all sit in fixed columns now, so every row lines up top to bottom instead of drifting based on things like \"1 success\" vs. \"0 successes\", or whether a level is in progress.",
+        "An in-progress level's \"in progress\" now shows where the average would go, instead of its own separate column — one less column, and nothing to line up oddly against.",
+        "The percentage on the right now reads \"Success rate: X%\", with the label and value both landing in the same spot on every row.",
+        "Tightened up the spacing throughout so nothing looks stretched out or unevenly gapped.",
+      ],
+    },
+    {
+      date: "2026-09-17",
+      title: "Pity progress bar now shows the numbers too",
+      items: [
+        "The pity bar on each accessory card now shows \"current / needed\" next to the bar, not just the fill.",
+      ],
+    },
+    {
       date: "2026-09-14",
       title: "Import and Link Save File now warn you about which copy is newer",
       items: [
@@ -289,7 +306,7 @@
   // for sets that define avgAttempts (currently just Ekleta). Negative = luckier than average
   // overall; positive = unluckier. Takes the same merged setLevelRows as the set-wide Rates by
   // Level breakdown, and scales each level's average by how many accessories cleared it there
-  // (same reasoning as avgAttemptsHtml) rather than comparing against a single clear's average.
+  // (same reasoning as avgAttemptsParts) rather than comparing against a single clear's average.
   function computeLuckScore(setDef, setLevelRows) {
     if (!setDef.avgAttempts) return null;
     const rows = setLevelRows.filter((r) => r.cleared);
@@ -543,7 +560,20 @@
 
   // Shared by the per-item "Rates by Level" block and the Stats for Nerds set-wide breakdown
   // below — same row shape, just fed by a different log (one item's vs. the whole set's merged).
+  //
+  // .level-rate-stats is a CSS grid with fixed-width columns (see style.css), and every row
+  // always emits the same 6 spans in the same order -- taps/success/pity/fail/avg/delta -- even
+  // when a column has nothing to show (an empty span still reserves its slot). Without that,
+  // "0 successes" vs. "1 success" (or a level being in-progress vs. not) shifts every column after
+  // it by a different amount on every row, so nothing lines up top to bottom.
+  //
+  // "in progress" lives in the avg column instead of its own slot -- a level that isn't cleared
+  // yet doesn't have a real avg/delta to show there anyway, so there's nothing to share the space
+  // with, and it keeps the row a column shorter.
   function levelRateRowHtml(setDef, r) {
+    const avgParts = avgAttemptsParts(setDef, r);
+    const avgText = r.cleared ? (avgParts ? avgParts.avgText : "") : "in progress";
+    const avgCls = r.cleared ? "level-rate-avg" : "level-rate-tag";
     return `
       <div class="level-rate-row${!r.cleared ? " in-progress" : ""}">
         <span class="level-rate-badge">${r.level.toUpperCase()}</span>
@@ -552,10 +582,13 @@
           <span class="level-rate-success">${r.successes} success${r.successes === 1 ? "" : "es"}</span>
           <span class="level-rate-pity">${r.pity} pity</span>
           <span class="level-rate-fail">${r.fails} fail${r.fails === 1 ? "" : "s"}</span>
-          ${!r.cleared ? `<span class="level-rate-tag">in progress</span>` : ""}
-          ${avgAttemptsHtml(setDef, r)}
+          <span class="${avgCls}">${avgText}</span>
+          <span class="level-rate-delta ${avgParts ? avgParts.cls : ""}">${avgParts ? avgParts.deltaText : ""}</span>
         </span>
-        <span class="level-rate-pct">${r.rate}%</span>
+        <span class="level-rate-pct">
+          <span class="level-rate-pct-label">Success rate:</span>
+          <span class="level-rate-pct-value">${r.rate}%</span>
+        </span>
       </div>
     `;
   }
@@ -586,16 +619,15 @@
   }
 
   // "vs average" comparison for one Rates-by-Level row, if this set defines community averages
-  // (currently just Ekleta). Cleared levels get a colored delta (fewer tries than average is
-  // lucky/green, more is unlucky/red); an in-progress level just shows the average as a plain
-  // reference point, since partial attempts aren't meaningfully comparable to a full average yet.
-  function avgAttemptsHtml(setDef, row) {
-    if (!setDef.avgAttempts) return "";
+  // (currently just Ekleta) and this level is actually cleared -- an in-progress level shows
+  // "in progress" in this same slot instead (see levelRateRowHtml), since partial attempts
+  // aren't meaningfully comparable to a full average yet. Returns { avgText, deltaText, cls }
+  // instead of HTML, so the caller can drop each piece into its own fixed grid column for
+  // alignment across rows.
+  function avgAttemptsParts(setDef, row) {
+    if (!setDef.avgAttempts || !row.cleared) return null;
     const perClear = setDef.avgAttempts[row.level];
-    if (perClear == null) return "";
-    if (!row.cleared) {
-      return `<span class="level-rate-avg">avg ${perClear.toFixed(2)}</span>`;
-    }
+    if (perClear == null) return null;
     // A level is cleared at most once per accessory (one success or pity entry), so for a row
     // merged across several accessories (Stats for Nerds' set-wide breakdown), successes+pity
     // is exactly how many of them cleared it here -- the average needs to scale by that many
@@ -606,8 +638,8 @@
     const delta = row.attempts - avg;
     const sign = delta > 0 ? "+" : "";
     const cls = delta < 0 ? "good" : delta > 0 ? "bad" : "";
-    const avgLabel = clears > 1 ? `avg ${avg.toFixed(2)} (${perClear.toFixed(2)}&times;${clears})` : `avg ${avg.toFixed(2)}`;
-    return `<span class="level-rate-avg">${avgLabel}</span><span class="level-rate-delta ${cls}">${sign}${delta.toFixed(2)} vs avg</span>`;
+    const avgText = clears > 1 ? `avg ${avg.toFixed(2)} (${perClear.toFixed(2)}&times;${clears})` : `avg ${avg.toFixed(2)}`;
+    return { avgText, deltaText: `${sign}${delta.toFixed(2)} vs avg`, cls };
   }
 
   function streakRowHtml(log, pityThreshold, centered) {
@@ -1220,13 +1252,19 @@
       const threshold = target ? setDef.pityThreshold[target] : 1;
       const pct = maxed ? 100 : Math.min(100, (acc.pityStack / threshold) * 100);
       const ready = !maxed && acc.pityStack >= threshold;
+      // Maxed pieces force threshold to a placeholder 1 just to fill the bar, so the count next
+      // to it would be meaningless there -- only show it for pieces still actually climbing.
+      const pityLabel = maxed ? "" : `${acc.pityStack} / ${threshold}`;
 
       card.className = "acc-card" + (acc.id === setState.selectedId ? " selected" : "");
       card.innerHTML = `
         <div class="acc-icon-wrap">${iconSrc ? `<img src="${iconSrc}" alt="${acc.type}">` : ""}${romanOverlayHtml(acc.currentLevel)}</div>
         <div class="acc-name">${escapeHtml(acc.name)}</div>
         <div class="acc-level-badge${maxed ? " maxed" : ""}">${maxed ? "MAX &bull; " + acc.currentLevel.toUpperCase() : acc.currentLevel}</div>
-        <div class="acc-mini-pity${ready ? " ready" : ""}"><div style="width:${pct}%"></div></div>
+        <div class="acc-mini-pity-row">
+          <div class="acc-mini-pity${ready ? " ready" : ""}"><div style="width:${pct}%"></div></div>
+          ${pityLabel ? `<span class="acc-mini-pity-count">${pityLabel}</span>` : ""}
+        </div>
       `;
       card.addEventListener("click", () => {
         setState.selectedId = acc.id;

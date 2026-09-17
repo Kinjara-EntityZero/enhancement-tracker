@@ -394,8 +394,15 @@ html, body {
   border-color: var(--gold);
 }
 
-.acc-mini-pity {
+.acc-mini-pity-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: 100%;
+}
+
+.acc-mini-pity {
+  flex: 1;
   height: 4px;
   background: var(--panel-3);
   border-radius: 3px;
@@ -406,6 +413,14 @@ html, body {
   background: linear-gradient(90deg, var(--accent-dim), var(--accent));
 }
 .acc-mini-pity.ready > div { background: linear-gradient(90deg, var(--gold-dim), var(--gold)); }
+
+.acc-mini-pity-count {
+  font-size: 0.62rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 
 /* ---------- Detail panel ---------- */
 
@@ -749,8 +764,12 @@ select, input[type=number] {
   font-size: 0.83rem;
 }
 
+/* box-shadow instead of a wider border-left -- a real border-left changes the box's content
+   width, nudging every column 2px right on in-progress rows only and breaking the alignment
+   the fixed-width columns above are there to guarantee. box-shadow paints over the edge without
+   affecting layout. */
 .level-rate-row.in-progress {
-  border-left: 3px solid var(--accent);
+  box-shadow: inset 3px 0 0 0 var(--accent);
 }
 
 .level-rate-badge {
@@ -758,18 +777,39 @@ select, input[type=number] {
   color: var(--gold);
   width: 42px;
   flex-shrink: 0;
+  /* On top of .level-rate-row's 12px flex gap, so the badge-to-taps gap is doubled (24px total)
+     without also widening the stats-to-pct gap at the row's other end. */
+  margin-right: 12px;
 }
 
+/* Fixed-width columns for taps/success/pity/fail -- these are the ones whose content genuinely
+   swings wildly ("0 successes" vs. "1 success", an in-progress tag appearing/vanishing), which is
+   what was actually cascading into misaligned rows. avg/delta use max-content (NOT auto): a plain
+   `auto` track size-maximizes to soak up whatever leftover space the row has, which is exactly why
+   these two ballooned apart with a huge gap on a wide panel -- max-content sizes strictly to its
+   own text and never grows past that. justify-content: start keeps the whole grid pinned to the
+   left rather than letting the row's extra width spread the columns apart at all; every column
+   then sits a consistent column-gap from the next, left-aligned, on any panel width. Every row
+   emits the same 6 spans in the same order (levelRateRowHtml), including empty ones, so each
+   always lands in the column it belongs to. */
 .level-rate-stats {
   flex: 1;
-  display: flex;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: 52px 80px 46px 46px max-content max-content;
+  justify-content: start;
+  column-gap: 28px;
+  align-items: center;
   color: var(--text-dim);
+}
+
+.level-rate-stats > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .level-rate-tag {
   color: var(--accent);
-  font-size: 0.75rem;
 }
 
 .level-rate-success {
@@ -786,21 +826,38 @@ select, input[type=number] {
 
 .level-rate-avg {
   color: var(--text-faint);
-  font-size: 0.78rem;
 }
 
 .level-rate-delta {
-  font-size: 0.78rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .level-rate-delta.good { color: var(--success); }
 .level-rate-delta.bad { color: var(--fail); }
 
+/* Fixed width, label and value pinned to opposite ends -- otherwise this being the last flex
+   item in the row (sized to its own content, just pushed flush right) meant "Success rate:"
+   itself started at a different x on every row depending on how wide that row's own "25%" vs
+   "100%" happened to be. */
 .level-rate-pct {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  /* Tight to "Success rate:" + the widest value ("100%") -- wider than that just let
+     justify-content: space-between stretch the gap between them, and stretch it by a different
+     amount on every row depending on that row's own value width (0% vs 100%). */
+  width: 120px;
+  flex-shrink: 0;
   font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.level-rate-pct-label {
+  font-weight: 400;
+  color: var(--text-faint);
 }
 
 .stat {
