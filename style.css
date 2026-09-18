@@ -1201,7 +1201,13 @@ select, input[type=number] {
 
 /* ---------- Share card button ---------- */
 
-.btn-share {
+.detail-header-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   align-self: flex-start;
   margin-left: auto;
 }

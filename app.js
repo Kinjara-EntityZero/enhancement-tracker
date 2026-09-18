@@ -1124,6 +1124,10 @@
     save();
     renderGrid();
     renderOverallHistory();
+    // Deliberately not a full renderDetail() -- that would rebuild the name input out from under
+    // an in-progress edit. Its label depends on the name too, though, so patch it directly.
+    const shareBtn = document.getElementById("btn-share-card");
+    if (shareBtn) shareBtn.textContent = `Share ${acc.name} Card`;
   }
 
   // ---------- Rendering ----------
@@ -1379,7 +1383,10 @@
             }
           </div>
         </div>
-        <button class="btn btn-ghost btn-share" id="btn-share-card" title="Download a shareable summary image of this item's progress">Share Card</button>
+        <div class="detail-header-actions">
+          <button class="btn btn-ghost btn-share" id="btn-share-card" title="Download a shareable summary image of this item's progress">Share ${escapeHtml(acc.name)} Card</button>
+          <button class="btn btn-ghost btn-share" id="btn-share-overall-card" title="Download a shareable summary image of every accessory combined">Share Overall Card</button>
+        </div>
       </div>
 
       <div class="action-section">
@@ -1449,6 +1456,9 @@
     });
     document.getElementById("btn-share-card").addEventListener("click", () => {
       generateShareCard(setDef, acc, iconSrc, { total, successes, pity, fails, rate }, maxed, target, levelRows);
+    });
+    document.getElementById("btn-share-overall-card").addEventListener("click", () => {
+      generateOverallShareCard(setDef, setState);
     });
   }
 
@@ -1754,6 +1764,217 @@
     });
   }
 
+  // ---------- Share card visual helpers (background, badge circle, stat chips, dividers) ----------
+  // Extracted so the per-item and overall share cards look like the same "series" of card instead
+  // of visually drifting apart over time.
+
+  function hexToRgba(hex, alpha) {
+    const h = hex.replace("#", "");
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+  }
+
+  // Diagonal gradient + two soft accent glows (bright behind the badge circle, dim in the
+  // opposite corner for depth) + a large, very faint watermark of the item's own icon bleeding
+  // off the bottom-right corner (a common "trading card" touch) + a doubled border, instead of a
+  // flat fill and a single stroke. The watermark shares the same withIcon/iconImg gating as the
+  // badge circle -- drawing either one taints the canvas the same way under file://, so both need
+  // to disappear together on the icon-less fallback pass.
+  function drawShareCardBackground(ctx, W, H, accent, iconImg, withIcon) {
+    const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+    bgGrad.addColorStop(0, "#120e18");
+    bgGrad.addColorStop(0.55, "#1a1522");
+    bgGrad.addColorStop(1, "#221a2c");
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    const glow1 = ctx.createRadialGradient(W - 84, 70, 10, W - 84, 70, 240);
+    glow1.addColorStop(0, hexToRgba(accent, 0.28));
+    glow1.addColorStop(1, hexToRgba(accent, 0));
+    ctx.fillStyle = glow1;
+    ctx.fillRect(0, 0, W, H);
+
+    const glow2 = ctx.createRadialGradient(50, H - 40, 10, 50, H - 40, 220);
+    glow2.addColorStop(0, hexToRgba(accent, 0.14));
+    glow2.addColorStop(1, hexToRgba(accent, 0));
+    ctx.fillStyle = glow2;
+    ctx.fillRect(0, 0, W, H);
+
+    if (withIcon && iconImg) {
+      ctx.save();
+      const size = Math.min(H * 1.15, 380);
+      ctx.globalAlpha = 0.07;
+      ctx.drawImage(iconImg, W - size * 0.62, H - size * 0.62, size, size);
+      ctx.restore();
+    }
+
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 4;
+    roundRectPath(ctx, 4, 4, W - 8, H - 8, 14);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.14)";
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, 10, 10, W - 20, H - 20, 10);
+    ctx.stroke();
+  }
+
+  // Small rounded pill badge (used for the set name in the header) -- filled with a translucent
+  // tint of the accent color and outlined, rather than plain floating text.
+  function drawPillLabel(ctx, text, x, y, accent) {
+    ctx.font = "700 11px -apple-system, Segoe UI, sans-serif";
+    const textW = ctx.measureText(text).width;
+    const padX = 10, h = 22;
+    ctx.fillStyle = hexToRgba(accent, 0.2);
+    roundRectPath(ctx, x, y, textW + padX * 2, h, h / 2);
+    ctx.fill();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1;
+    roundRectPath(ctx, x, y, textW + padX * 2, h, h / 2);
+    ctx.stroke();
+    ctx.fillStyle = accent;
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + padX, y + h / 2 + 1);
+    ctx.textBaseline = "alphabetic";
+    return h;
+  }
+
+  // The circular badge in the top-right: a soft glow behind it, the icon (if available) clipped
+  // into a ring, a double-ring border, and whatever center overlay the caller draws (a roman
+  // numeral for one accessory, an "X/Y" maxed count for the overall card).
+  function drawBadgeCircle(ctx, { cx, cy, r, accent, iconImg, withIcon, drawCenter }) {
+    const glow = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 1.4);
+    glow.addColorStop(0, hexToRgba(accent, 0.45));
+    glow.addColorStop(1, hexToRgba(accent, 0));
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.7, 0, Math.PI * 2);
+    ctx.fill();
+
+    const circGrad = ctx.createRadialGradient(cx, cy - 16, 8, cx, cy, r);
+    circGrad.addColorStop(0, accent);
+    circGrad.addColorStop(1, "#000");
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = circGrad;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    if (withIcon && iconImg) {
+      const size = r * 1.18;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - 8, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(iconImg, cx - size / 2, cy - size / 2, size, size);
+      ctx.restore();
+    }
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = accent;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.textAlign = "center";
+    drawCenter(ctx);
+    ctx.textAlign = "left";
+  }
+
+  // Each stat as a rounded "chip" tile (translucent fill + hairline border) instead of raw
+  // floating text, so the stats row reads as a unified strip of tiles.
+  function drawStatChips(ctx, statsList, { M, W, y, h }) {
+    const gap = 10;
+    const n = statsList.length;
+    const chipW = (W - M * 2 - gap * (n - 1)) / n;
+    statsList.forEach(([label, val], i) => {
+      const x = M + i * (chipW + gap);
+      ctx.fillStyle = "rgba(255,255,255,0.045)";
+      roundRectPath(ctx, x, y, chipW, h, 10);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.lineWidth = 1;
+      roundRectPath(ctx, x, y, chipW, h, 10);
+      ctx.stroke();
+
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#a496b8";
+      ctx.font = "600 11px -apple-system, Segoe UI, sans-serif";
+      ctx.fillText(label.toUpperCase(), x + chipW / 2, y + 23);
+      ctx.fillStyle = "#f2ecf7";
+      ctx.font = "700 24px Georgia, serif";
+      ctx.fillText(String(val), x + chipW / 2, y + 50);
+      ctx.textAlign = "left";
+    });
+  }
+
+  // Thin accent-to-transparent divider line, used to separate major sections of a card.
+  function drawDivider(ctx, x1, x2, y, accent) {
+    const grad = ctx.createLinearGradient(x1, 0, x2, 0);
+    grad.addColorStop(0, hexToRgba(accent, 0.6));
+    grad.addColorStop(1, hexToRgba(accent, 0));
+    ctx.fillStyle = grad;
+    ctx.fillRect(x1, y, x2 - x1, 2);
+  }
+
+  // Shared by the per-item share card and the overall (all-accessories) share card -- draws the
+  // "RATES BY LEVEL" block starting at ratesTop, one row per level. Level names vary hugely in
+  // width across sets (PRI/DEC vs. Alchemy's SHINING/RESPLENDENT), so the later columns can't sit
+  // at a fixed offset without either overlapping long names or wasting space for short ones --
+  // size the level column to whatever's actually the longest name in THIS card instead.
+  function drawRatesByLevelBlock(ctx, levelRows, { M, W, ratesTop, ratesRowH, accent }) {
+    ctx.fillStyle = "#a496b8";
+    ctx.font = "700 12px -apple-system, Segoe UI, sans-serif";
+    ctx.fillText("RATES BY LEVEL", M, ratesTop);
+    drawDivider(ctx, M, W - M, ratesTop + 8, accent);
+
+    ctx.font = "700 13px Georgia, serif";
+    const levelColW = Math.max(...levelRows.map((r) => ctx.measureText(r.level.toUpperCase()).width));
+    const colTaps = M + levelColW + 26;
+    const colSuccess = colTaps + 66;
+    const colPity = colSuccess + 110;
+    const colFail = colPity + 70;
+
+    levelRows.forEach((r, i) => {
+      const ry = ratesTop + 30 + i * ratesRowH;
+      ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.015)";
+      roundRectPath(ctx, M, ry - 17, W - M * 2, 24, 6);
+      ctx.fill();
+
+      ctx.fillStyle = accent;
+      ctx.font = "700 13px Georgia, serif";
+      ctx.fillText(r.level.toUpperCase(), M + 10, ry);
+
+      ctx.font = "12px -apple-system, Segoe UI, sans-serif";
+      ctx.fillStyle = "#c3b6d1";
+      ctx.fillText(`${r.attempts} taps`, colTaps, ry);
+      ctx.fillStyle = "#4caf7d";
+      ctx.fillText(`${r.successes} success${r.successes === 1 ? "" : "es"}`, colSuccess, ry);
+      ctx.fillStyle = "#5aa9e6";
+      ctx.fillText(`${r.pity} pity`, colPity, ry);
+      ctx.fillStyle = "#e0645f";
+      ctx.fillText(`${r.fails} fail${r.fails === 1 ? "" : "s"}`, colFail, ry);
+
+      ctx.fillStyle = "#f2ecf7";
+      ctx.font = "700 13px Georgia, serif";
+      ctx.textAlign = "right";
+      ctx.fillText(`${r.rate}%`, W - M - 10, ry);
+      ctx.textAlign = "left";
+    });
+  }
+
   async function generateShareCard(setDef, acc, iconSrc, stats, maxed, target, levelRows) {
     // Opened synchronously (still inside the click handler's call stack, before any await) so
     // browsers treat it as a direct result of the user's click rather than an unsolicited
@@ -1779,11 +2000,12 @@
     const W = 720;
     const M = 36;
     let cursorY = 154; // below the header block (name + circle badge)
-    cursorY += 60; // stats row
+    cursorY += 76; // stats row (chips end at y=202; this leaves real breathing room before the
+    // next line's text, instead of its ascenders nearly touching the chip bottoms)
     if (longest > 0) cursorY += 34; // streak line
     const ratesTop = cursorY + 20;
     const ratesRowH = 26;
-    const ratesBlockH = levelRows.length ? 22 + levelRows.length * ratesRowH + 8 : 0;
+    const ratesBlockH = levelRows.length ? 30 + levelRows.length * ratesRowH + 8 : 0;
     const H = (levelRows.length ? ratesTop + ratesBlockH : cursorY + 4) + 40;
 
     // Draws the whole card onto a brand-new canvas and returns it. Tainting (from drawing a
@@ -1796,75 +2018,46 @@
       canvas.height = H;
       const ctx = canvas.getContext("2d");
 
-      const bgGrad = ctx.createLinearGradient(0, 0, W, H);
-      bgGrad.addColorStop(0, "#15111c");
-      bgGrad.addColorStop(1, "#1f1828");
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, W, H);
-
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 5;
-      ctx.strokeRect(3, 3, W - 6, H - 6);
-
-      ctx.fillStyle = accent;
-      ctx.font = "700 17px Georgia, serif";
-      ctx.fillText(setDef.label.toUpperCase(), M, 46);
+      drawShareCardBackground(ctx, W, H, accent, iconImg, withIcon);
+      drawPillLabel(ctx, setDef.label.toUpperCase(), M, 26, accent);
 
       ctx.fillStyle = "#f2ecf7";
       ctx.font = "700 32px Georgia, serif";
       ctx.fillText(acc.name, M, 84);
 
-      const cx = W - 90, cy = 78, r = 56;
-      const circGrad = ctx.createRadialGradient(cx, cy - 16, 8, cx, cy, r);
-      circGrad.addColorStop(0, accent);
-      circGrad.addColorStop(1, "#000");
-      ctx.globalAlpha = 0.35;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = circGrad;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = accent;
-      ctx.stroke();
-
-      if (withIcon && iconImg) {
-        const size = 66;
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(cx, cy, r - 8, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.drawImage(iconImg, cx - size / 2, cy - size / 2, size, size);
-        ctx.restore();
-      }
-
-      const numeral = romanNumeralFor(acc.currentLevel);
-      ctx.textAlign = "center";
-      if (numeral) {
-        // White text with a black outline, same convention as the roman-numeral badges
-        // painted over icons everywhere else in the app.
-        ctx.font = "700 24px Georgia, serif";
-        ctx.lineWidth = 5;
-        ctx.strokeStyle = "#000";
-        ctx.lineJoin = "round";
-        ctx.strokeText(numeral, cx, cy + 8);
-        ctx.fillStyle = "#fff";
-        ctx.fillText(numeral, cx, cy + 8);
-      } else {
-        // Level names without a roman numeral vary a lot in length (Base, Shining, ...) --
-        // shrink the font until it fits the circle instead of letting long ones overflow it.
-        const label = acc.currentLevel.toUpperCase();
-        const maxWidth = (r - 14) * 2;
-        let fontSize = 26;
-        ctx.font = `700 ${fontSize}px Georgia, serif`;
-        while (ctx.measureText(label).width > maxWidth && fontSize > 12) {
-          fontSize -= 2;
-          ctx.font = `700 ${fontSize}px Georgia, serif`;
-        }
-        ctx.fillStyle = "#fff";
-        ctx.fillText(label, cx, cy + fontSize / 3);
-      }
-      ctx.textAlign = "left";
+      // Smaller than before (was r=56) and nudged up -- at the old size its glow reached down far
+      // enough to overlap the Success Rate chip below it.
+      const cx = W - 84, cy = 70, r = 42;
+      drawBadgeCircle(ctx, {
+        cx, cy, r, accent, iconImg, withIcon,
+        drawCenter: (ctx) => {
+          const numeral = romanNumeralFor(acc.currentLevel);
+          if (numeral) {
+            // White text with a black outline, same convention as the roman-numeral badges
+            // painted over icons everywhere else in the app.
+            ctx.font = "700 19px Georgia, serif";
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = "#000";
+            ctx.lineJoin = "round";
+            ctx.strokeText(numeral, cx, cy + 6);
+            ctx.fillStyle = "#fff";
+            ctx.fillText(numeral, cx, cy + 6);
+          } else {
+            // Level names without a roman numeral vary a lot in length (Base, Shining, ...) --
+            // shrink the font until it fits the circle instead of letting long ones overflow it.
+            const label = acc.currentLevel.toUpperCase();
+            const maxWidth = (r - 12) * 2;
+            let fontSize = 20;
+            ctx.font = `700 ${fontSize}px Georgia, serif`;
+            while (ctx.measureText(label).width > maxWidth && fontSize > 9) {
+              fontSize -= 2;
+              ctx.font = `700 ${fontSize}px Georgia, serif`;
+            }
+            ctx.fillStyle = "#fff";
+            ctx.fillText(label, cx, cy + fontSize / 3);
+          }
+        },
+      });
 
       if (maxed) {
         ctx.fillStyle = "#f0d878";
@@ -1883,72 +2076,24 @@
         ["Fails", stats.fails],
         ["Success Rate", stats.rate + "%"],
       ];
-      const statW = (W - M * 2) / statsList.length;
-      const statLabelY = 154, statValY = 184;
-      statsList.forEach(([label, val], i) => {
-        const x = M + i * statW;
-        ctx.fillStyle = "#8d7f9d";
-        ctx.font = "600 12px -apple-system, Segoe UI, sans-serif";
-        ctx.fillText(label.toUpperCase(), x, statLabelY);
-        ctx.fillStyle = "#f2ecf7";
-        ctx.font = "700 26px Georgia, serif";
-        ctx.fillText(String(val), x, statValY);
-      });
+      drawStatChips(ctx, statsList, { M, W, y: 138, h: 64 });
 
-      let y = statValY + 30;
+      let y = 230; // 154 + 76 -- matches the cursorY reservation above
       if (longest > 0) {
         ctx.fillStyle = "#f0827d";
         ctx.font = "600 15px -apple-system, Segoe UI, sans-serif";
         const streakText = cur > 0
-          ? `Current fail streak: ${cur}  •  Longest fail streak: ${longest}`
-          : `Longest fail streak: ${longest}`;
+          ? `\u{1F9CA} Current fail streak: ${cur}  •  Longest fail streak: ${longest}`
+          : `\u{1F9CA} Longest fail streak: ${longest}`;
         ctx.fillText(streakText, M, y);
         y += 34;
       }
 
       if (levelRows.length) {
-        ctx.fillStyle = "#8d7f9d";
-        ctx.font = "700 12px -apple-system, Segoe UI, sans-serif";
-        ctx.fillText("RATES BY LEVEL", M, ratesTop);
-
-        // Level names vary hugely in width across sets (PRI/DEC vs. Alchemy's SHINING/
-        // RESPLENDENT), so the later columns can't sit at a fixed offset without either
-        // overlapping long names or wasting space for short ones -- size the level column to
-        // whatever's actually the longest name in THIS card instead.
-        ctx.font = "700 13px Georgia, serif";
-        const levelColW = Math.max(...levelRows.map((r) => ctx.measureText(r.level.toUpperCase()).width));
-        const colTaps = M + levelColW + 26;
-        const colSuccess = colTaps + 66;
-        const colPity = colSuccess + 110;
-        const colFail = colPity + 70;
-
-        levelRows.forEach((r, i) => {
-          const ry = ratesTop + 22 + i * ratesRowH;
-          ctx.fillStyle = "rgba(255,255,255,0.04)";
-          ctx.fillRect(M, ry - 16, W - M * 2, 22);
-
-          ctx.fillStyle = accent;
-          ctx.font = "700 13px Georgia, serif";
-          ctx.fillText(r.level.toUpperCase(), M + 10, ry);
-
-          ctx.font = "12px -apple-system, Segoe UI, sans-serif";
-          ctx.fillStyle = "#c3b6d1";
-          ctx.fillText(`${r.attempts} taps`, colTaps, ry);
-          ctx.fillStyle = "#4caf7d";
-          ctx.fillText(`${r.successes} success${r.successes === 1 ? "" : "es"}`, colSuccess, ry);
-          ctx.fillStyle = "#5aa9e6";
-          ctx.fillText(`${r.pity} pity`, colPity, ry);
-          ctx.fillStyle = "#e0645f";
-          ctx.fillText(`${r.fails} fail${r.fails === 1 ? "" : "s"}`, colFail, ry);
-
-          ctx.fillStyle = "#f2ecf7";
-          ctx.font = "700 13px Georgia, serif";
-          ctx.textAlign = "right";
-          ctx.fillText(`${r.rate}%`, W - M - 10, ry);
-          ctx.textAlign = "left";
-        });
+        drawRatesByLevelBlock(ctx, levelRows, { M, W, ratesTop, ratesRowH, accent });
       }
 
+      drawDivider(ctx, M, W - M, H - 40, accent);
       ctx.fillStyle = "#5a4f66";
       ctx.font = "12px -apple-system, Segoe UI, sans-serif";
       ctx.fillText("Enhancement Tracker", M, H - 20);
@@ -2011,6 +2156,204 @@
       </head>
       <body>
         <img src="${dataUrl}" alt="${escapeHtml(acc.name)} share card preview">
+        <a class="download-btn" href="${dataUrl}" download="${filename}">Download PNG</a>
+      </body>
+      </html>
+    `);
+    win.document.close();
+    showToast("Share card preview opened in a new tab");
+  }
+
+  // Same idea as generateShareCard, but for the whole set instead of one accessory -- everything
+  // merged across every trackable piece (the same merged data Overall History and Stats for
+  // Nerds already use), so it reads as "here's my Ekleta progress overall" rather than one item.
+  async function generateOverallShareCard(setDef, setState) {
+    const win = window.open("", "_blank");
+    if (!win) {
+      showToast("Could not open the preview — check your popup blocker");
+      return;
+    }
+    win.document.write(`<!DOCTYPE html><title>Generating&hellip;</title><body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#0d0a12;color:#8d7f9d;font-family:-apple-system,'Segoe UI',sans-serif;">Generating share card&hellip;</body>`);
+    win.document.close();
+
+    const trackedIds = setDef.accessories.filter((a) => pieceStatus(setDef, setState, a.id).kind === "normal");
+    const iconSrc = trackedIds.length ? getAccessoryIcon(setDef, setState, trackedIds[0].id) : "";
+    const iconImg = await loadImage(iconSrc);
+    if (win.closed) return;
+
+    const accent = THEME_ACCENT[setDef.theme] || THEME_ACCENT.purple;
+    const allLogs = trackedIds.flatMap((a) => setState.accessories[a.id].log);
+    const stats = computeStats(allLogs, setDef.pityThreshold);
+    // Chronological (oldest-first) across every accessory combined, same merge Overall History
+    // uses for its streak row -- a fail streak can span accessory boundaries in time order.
+    const chronological = allLogs
+      .filter((e) => e.type === "success" || e.type === "fail")
+      .slice()
+      .sort((a, b) => a.timestamp - b.timestamp);
+    const cur = currentFailStreak(chronological, setDef.pityThreshold);
+    const longest = longestFailStreak(chronological, setDef.pityThreshold);
+    const levelRows = computeSetLevelBreakdown(setDef, setState);
+    const luck = computeLuckScore(setDef, levelRows);
+    const cronStats = computeCronStats(setDef, levelRows);
+    const maxedCount = trackedIds.filter((a) => isMaxed(setState.accessories[a.id].currentLevel, setDef.levels)).length;
+    const totalCount = trackedIds.length;
+    const fullyMaxed = totalCount > 0 && maxedCount === totalCount;
+
+    const W = 720;
+    const M = 36;
+    let cursorY = 154;
+    cursorY += 76; // stats row (chips end at y=202; this leaves real breathing room before the
+    // next line's text, instead of its ascenders nearly touching the chip bottoms)
+    if (longest > 0) cursorY += 34; // streak line
+    if (luck) cursorY += 26; // luck score line
+    const ratesTop = cursorY + 20;
+    const ratesRowH = 26;
+    const ratesBlockH = levelRows.length ? 30 + levelRows.length * ratesRowH + 8 : 0;
+    const afterRatesY = levelRows.length ? ratesTop + ratesBlockH : cursorY + 4;
+    const cronLineY = afterRatesY + (cronStats ? 12 : 0);
+    const H = cronLineY + (cronStats ? 28 : 0) + 40;
+
+    function draw(withIcon) {
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d");
+
+      drawShareCardBackground(ctx, W, H, accent, iconImg, withIcon);
+      drawPillLabel(ctx, setDef.label.toUpperCase(), M, 26, accent);
+
+      ctx.fillStyle = "#f2ecf7";
+      ctx.font = "700 32px Georgia, serif";
+      ctx.fillText("All Accessories", M, 84);
+
+      // Smaller than before (was r=56) and nudged up -- at the old size its glow reached down far
+      // enough to overlap the Success Rate chip below it.
+      const cx = W - 84, cy = 70, r = 42;
+      drawBadgeCircle(ctx, {
+        cx, cy, r, accent, iconImg, withIcon,
+        // "3/6" maxed-count overlay instead of a single roman numeral -- there's no one level to
+        // show when this card is summarizing every accessory at once.
+        drawCenter: (ctx) => {
+          const countLabel = `${maxedCount}/${totalCount}`;
+          ctx.font = "700 18px Georgia, serif";
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = "#000";
+          ctx.lineJoin = "round";
+          ctx.strokeText(countLabel, cx, cy + 6);
+          ctx.fillStyle = "#fff";
+          ctx.fillText(countLabel, cx, cy + 6);
+        },
+      });
+
+      if (fullyMaxed) {
+        ctx.fillStyle = "#f0d878";
+        ctx.font = "700 20px Georgia, serif";
+        ctx.fillText("★ ALL ACCESSORIES MAXED", M, 120);
+      } else {
+        ctx.fillStyle = "#c3b6d1";
+        ctx.font = "16px -apple-system, Segoe UI, sans-serif";
+        ctx.fillText(`${maxedCount} of ${totalCount} accessories maxed`, M, 120);
+      }
+
+      const statsList = [
+        ["Attempts", stats.total],
+        ["Successes", stats.successes],
+        ["Pity", stats.pity],
+        ["Fails", stats.fails],
+        ["Success Rate", stats.rate + "%"],
+      ];
+      drawStatChips(ctx, statsList, { M, W, y: 138, h: 64 });
+
+      let y = 230; // 154 + 76 -- matches the cursorY reservation above
+      if (longest > 0) {
+        ctx.fillStyle = "#f0827d";
+        ctx.font = "600 15px -apple-system, Segoe UI, sans-serif";
+        const streakText = cur > 0
+          ? `\u{1F9CA} Current fail streak: ${cur}  •  Longest fail streak: ${longest}`
+          : `\u{1F9CA} Longest fail streak: ${longest}`;
+        ctx.fillText(streakText, M, y);
+        y += 34;
+      }
+
+      if (luck) {
+        ctx.fillStyle = luck.score < 0 ? "#4caf7d" : luck.score > 0 ? "#e0645f" : "#c3b6d1";
+        ctx.font = "600 15px -apple-system, Segoe UI, sans-serif";
+        const verdict = luck.score < 0 ? "luckier" : luck.score > 0 ? "unluckier" : "dead on";
+        ctx.fillText(`\u{1F340} Luck Score: ${luck.score > 0 ? "+" : ""}${luck.score.toFixed(1)} (${verdict} than average)`, M, y);
+        y += 26;
+      }
+
+      if (levelRows.length) {
+        drawRatesByLevelBlock(ctx, levelRows, { M, W, ratesTop, ratesRowH, accent });
+      }
+
+      if (cronStats) {
+        ctx.fillStyle = "#8d7f9d";
+        ctx.font = "600 13px -apple-system, Segoe UI, sans-serif";
+        ctx.fillText(`Total Crons Used: ${cronStats.total.toLocaleString()}`, M, cronLineY + 16);
+      }
+
+      drawDivider(ctx, M, W - M, H - 40, accent);
+      ctx.fillStyle = "#5a4f66";
+      ctx.font = "12px -apple-system, Segoe UI, sans-serif";
+      ctx.fillText("Enhancement Tracker", M, H - 20);
+      ctx.textAlign = "right";
+      ctx.fillText(new Date().toLocaleDateString(), W - M, H - 20);
+      ctx.textAlign = "left";
+      return canvas;
+    }
+
+    let dataUrl;
+    try {
+      dataUrl = draw(true).toDataURL("image/png");
+    } catch (e) {
+      dataUrl = draw(false).toDataURL("image/png");
+    }
+
+    if (win.closed) return;
+    const filename = `${setDef.label}-all-accessories-share-card.png`.replace(/\s+/g, "-").toLowerCase();
+    win.document.open();
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>${escapeHtml(setDef.label)} Overall Share Card</title>
+        <style>
+          html, body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            background: #0d0a12;
+            font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+            padding: 32px;
+            box-sizing: border-box;
+          }
+          img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+          }
+          a.download-btn {
+            background: linear-gradient(135deg, #7c4dbd, #a875e0);
+            color: #17101f;
+            font-weight: 700;
+            padding: 12px 28px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.95rem;
+            font-family: inherit;
+          }
+          a.download-btn:hover { filter: brightness(1.1); }
+        </style>
+      </head>
+      <body>
+        <img src="${dataUrl}" alt="${escapeHtml(setDef.label)} overall share card preview">
         <a class="download-btn" href="${dataUrl}" download="${filename}">Download PNG</a>
       </body>
       </html>
