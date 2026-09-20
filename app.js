@@ -2135,17 +2135,16 @@
       drawBadgeCircle(ctx, {
         cx, cy, r, accent, iconImg, withIcon,
         drawCenter: (ctx) => {
-          // Doubled from the old 19/20px so the level reads at a glance. Both forms still
-          // shrink to fit: the widest numeral (VIII) is 80px at 38px type against an 84px
-          // circle, and the spelled-out levels (Alchemy's SHINING/RESPLENDENT) never fit at
-          // full size, so they step down until they do rather than overflowing the badge.
+          // Sized up from the old 19/20px so the level reads at a glance. Both forms still
+          // shrink to fit against the badge circle: every roman numeral clears it outright at
+          // this size (the widest, VIII, comes in around 59px against a 74px budget), while the
+          // spelled-out levels (Alchemy's SHINING/RESPLENDENT) never fit at full size and step
+          // down until they do rather than overflowing the badge.
           const numeral = romanNumeralFor(acc.currentLevel);
           const label = numeral || acc.currentLevel.toUpperCase();
-          const maxWidth = (r - 5) * 2; // keeps the widest numeral clear of the ring
-          let fontSize = 38;
+          const maxWidth = (r - 5) * 2; // keeps the text clear of the ring
+          let fontSize = 28;
           ctx.font = `700 ${fontSize}px Georgia, serif`;
-          // 1px steps rather than 2px: only VIII needs trimming at all, and a coarse step would
-          // drop it further below the others than it has to.
           while (ctx.measureText(label).width > maxWidth && fontSize > 9) {
             fontSize -= 1;
             ctx.font = `700 ${fontSize}px Georgia, serif`;
