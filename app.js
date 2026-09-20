@@ -7,6 +7,47 @@
   // Manually maintained, newest first. Add an entry here whenever a change ships.
   const CHANGELOG = [
     {
+      date: "2026-09-20",
+      title: "Contact me",
+      items: [
+        "Added a Contact Me button next to What's New. Questions, bug reports, or feedback — my Discord is in there.",
+      ],
+    },
+    {
+      date: "2026-09-20",
+      title: "Rates by Level now shows three separate averages",
+      items: [
+        "Each cleared level now spells out the global (community) average, your own average, and the difference between them, each with its own label.",
+        "Your average is now your attempts divided by how many times you actually cleared that level, so the set-wide breakdown compares like for like instead of tacking a \"(4.61×2)\" multiplier onto the community number.",
+        "The global average now stays visible on levels you haven't cleared yet — \"in progress\" replaces just your average and the comparison.",
+      ],
+    },
+    {
+      date: "2026-09-20",
+      title: "Spacing and alignment cleanup",
+      items: [
+        "Rates by Level now pins the level to the far left and the success rate to the far right, with the leftover width split evenly so every gap in the row is the same size at any window width.",
+        "History and Overall History badges (Success/Pity/Fail/Adjusted) are all one width now, so the text beside them starts in the same place on every row, with even spacing either side.",
+        "The enhancement level over the icon on share cards is twice as big.",
+      ],
+    },
+    {
+      date: "2026-09-20",
+      title: "Fixed Pace claiming more active days than days",
+      items: [
+        "Pace could read something like \"34 active days over 33 days\". Active days counted calendar dates while the total counted elapsed time between your first and last attempt, so logging late on one day and early on another lost a day. Both are counted as calendar dates now.",
+      ],
+    },
+    {
+      date: "2026-09-17",
+      title: "Share a card for your whole set, and a fresh look for both",
+      items: [
+        "New Share Overall Card button beside the per-item one: combined totals, streaks, Luck Score, Rates by Level, and Crons across every accessory in the set at once.",
+        "Both share cards were redesigned — a pill-shaped set badge, a glowing ring around the icon, stats as rounded tiles, section dividers, and a large faded version of the item's icon behind the card.",
+        "The per-item button now names the item, so it reads \"Share Ring 1 Card\".",
+      ],
+    },
+    {
       date: "2026-09-17",
       title: "Rates by Level columns now actually line up",
       items: [
@@ -229,6 +270,38 @@
 
   document.getElementById("btn-changelog").addEventListener("click", openChangelog);
 
+  // ---------- Contact ----------
+
+  const DISCORD_ID = "Kinjara";
+
+  function closeContact() {
+    document.getElementById("contact-modal-root").innerHTML = "";
+  }
+
+  function openContact() {
+    const root = document.getElementById("contact-modal-root");
+    root.innerHTML = `
+      <div class="modal-backdrop" id="contact-backdrop">
+        <div class="modal-box contact-modal">
+          <div class="modal-header">
+            <h2>Contact Me</h2>
+            <button id="btn-close-contact" class="modal-close" title="Close">&times;</button>
+          </div>
+          <div class="contact-body">
+            <p>Questions, bug reports, or feedback on the tracker &mdash; all welcome. Reach me on Discord:</p>
+            <div class="contact-handle">${escapeHtml(DISCORD_ID)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById("contact-backdrop").addEventListener("click", (e) => {
+      if (e.target.id === "contact-backdrop") closeContact();
+    });
+    document.getElementById("btn-close-contact").addEventListener("click", closeContact);
+  }
+
+  document.getElementById("btn-contact").addEventListener("click", openContact);
+
   // ---------- Stats for Nerds ----------
   // Deeper, opt-in stats computed cumulatively across every trackable accessory in the set —
   // pity behavior, pacing, and timing patterns that aren't interesting enough for the main
@@ -243,6 +316,14 @@
     if (hours < 24) return `${hours}h ${mins % 60}m`;
     const days = Math.floor(hours / 24);
     return `${days}d ${hours % 24}h`;
+  }
+
+  // Local midnight for a timestamp. Rounding the difference between two of these to whole days
+  // survives DST, where a calendar day is 23 or 25 hours rather than exactly 24.
+  function startOfLocalDay(ts) {
+    const d = new Date(ts);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
   }
 
   // Merges every trackable accessory's log into one timeline for the pacing/timing stats below,
@@ -269,8 +350,13 @@
       longestGapMs = Math.max(longestGapMs, sorted[i].timestamp - sorted[i - 1].timestamp);
     }
 
-    const elapsedMs = sorted.length >= 2 ? sorted[sorted.length - 1].timestamp - sorted[0].timestamp : 0;
-    const elapsedDays = Math.max(1, Math.round(elapsedMs / 86400000));
+    // Counted the same way activeDays is -- as calendar dates, first through last inclusive, not
+    // as the raw duration between the two timestamps. Those are different units, and the duration
+    // reads low: logging late on the first day and early on the last one spans 34 dates but only
+    // ~32 days of elapsed time, so you could end up with more active days than days.
+    const elapsedDays = sorted.length
+      ? Math.round((startOfLocalDay(sorted[sorted.length - 1].timestamp) - startOfLocalDay(sorted[0].timestamp)) / 86400000) + 1
+      : 1;
     const pacePerDay = real.length ? real.length / Math.max(1, dayCounts.size) : 0;
 
     const hourCounts = new Array(24).fill(0);
@@ -562,18 +648,19 @@
   // below — same row shape, just fed by a different log (one item's vs. the whole set's merged).
   //
   // .level-rate-stats is a CSS grid with fixed-width columns (see style.css), and every row
-  // always emits the same 6 spans in the same order -- taps/success/pity/fail/avg/delta -- even
-  // when a column has nothing to show (an empty span still reserves its slot). Without that,
-  // "0 successes" vs. "1 success" (or a level being in-progress vs. not) shifts every column after
-  // it by a different amount on every row, so nothing lines up top to bottom.
+  // always emits the same 7 spans in the same order -- taps/success/pity/fail/global-avg/your-avg/
+  // comparison -- even when a column has nothing to show (an empty span still reserves its slot).
+  // Without that, "0 successes" vs. "1 success" (or a level being in-progress vs. not) shifts every
+  // column after it by a different amount on every row, so nothing lines up top to bottom.
   //
-  // "in progress" lives in the avg column instead of its own slot -- a level that isn't cleared
-  // yet doesn't have a real avg/delta to show there anyway, so there's nothing to share the space
-  // with, and it keeps the row a column shorter.
+  // The global average always shows (it's a fixed reference point, not tied to your own
+  // progress). "in progress" replaces the your-average AND comparison columns together for a
+  // level you haven't cleared yet -- there's no personal average or delta to show until you have.
   function levelRateRowHtml(setDef, r) {
     const avgParts = avgAttemptsParts(setDef, r);
-    const avgText = r.cleared ? (avgParts ? avgParts.avgText : "") : "in progress";
-    const avgCls = r.cleared ? "level-rate-avg" : "level-rate-tag";
+    const globalAvgText = avgParts ? avgParts.globalAvgText : "";
+    const yourAvgText = r.cleared ? (avgParts ? avgParts.yourAvgText : "") : "in progress";
+    const yourAvgCls = r.cleared ? "level-rate-avg" : "level-rate-tag";
     return `
       <div class="level-rate-row${!r.cleared ? " in-progress" : ""}">
         <span class="level-rate-badge">${r.level.toUpperCase()}</span>
@@ -582,8 +669,9 @@
           <span class="level-rate-success">${r.successes} success${r.successes === 1 ? "" : "es"}</span>
           <span class="level-rate-pity">${r.pity} pity</span>
           <span class="level-rate-fail">${r.fails} fail${r.fails === 1 ? "" : "s"}</span>
-          <span class="${avgCls}">${avgText}</span>
-          <span class="level-rate-delta ${avgParts ? avgParts.cls : ""}">${avgParts ? avgParts.deltaText : ""}</span>
+          <span class="level-rate-avg">${globalAvgText}</span>
+          <span class="${yourAvgCls}">${yourAvgText}</span>
+          <span class="level-rate-delta ${r.cleared && avgParts ? avgParts.cls : ""}">${r.cleared && avgParts ? avgParts.comparisonText : ""}</span>
         </span>
         <span class="level-rate-pct">
           <span class="level-rate-pct-label">Success rate:</span>
@@ -618,28 +706,44 @@
     return `<span class="streak-pill ${hot ? "hot" : "cold"}">${icon} ${label}: ${streak.count} ${word}</span>`;
   }
 
-  // "vs average" comparison for one Rates-by-Level row, if this set defines community averages
-  // (currently just Ekleta) and this level is actually cleared -- an in-progress level shows
-  // "in progress" in this same slot instead (see levelRateRowHtml), since partial attempts
-  // aren't meaningfully comparable to a full average yet. Returns { avgText, deltaText, cls }
-  // instead of HTML, so the caller can drop each piece into its own fixed grid column for
-  // alignment across rows.
+  // Three-way average comparison for one Rates-by-Level row, if this set defines community
+  // averages (currently just Ekleta): the global (community) average for one clear, your own
+  // average per clear, and the difference between them. Comparing per-clear averages instead of
+  // scaling the global average by however many accessories cleared it (the old approach) means a
+  // row merged across several accessories in Stats for Nerds compares apples to apples without
+  // needing a "(X.XX×N)" footnote to explain itself.
+  // The global average is always meaningful even before you've cleared the level -- it's a
+  // reference point that doesn't depend on your own progress -- but "your average" and the
+  // comparison need a finished clear to mean anything, so those two come back empty (the caller
+  // shows "in progress" in their place) until row.cleared.
+  // Returns { globalAvgText, yourAvgText, comparisonText, cls } instead of HTML, so the caller can
+  // drop each piece into its own grid column for alignment across rows. Null when this set has no
+  // community-average data at all (most sets) -- callers fall back to leaving those columns blank.
   function avgAttemptsParts(setDef, row) {
-    if (!setDef.avgAttempts || !row.cleared) return null;
+    if (!setDef.avgAttempts) return null;
     const perClear = setDef.avgAttempts[row.level];
     if (perClear == null) return null;
+    const globalAvgText = `Global avg ${perClear.toFixed(2)}`;
+    if (!row.cleared) {
+      return { globalAvgText, yourAvgText: "", comparisonText: "", cls: "" };
+    }
     // A level is cleared at most once per accessory (one success or pity entry), so for a row
-    // merged across several accessories (Stats for Nerds' set-wide breakdown), successes+pity
-    // is exactly how many of them cleared it here -- the average needs to scale by that many
-    // clears, not stay pinned to one, or every merged row would look artificially unlucky.
-    // For a single-accessory row this is always 1, so per-item behavior is unchanged.
+    // merged across several accessories (Stats for Nerds' set-wide breakdown), successes+pity is
+    // exactly how many of them cleared it here -- "your average" divides the combined attempts by
+    // that many clears rather than staying pinned to one, so it's a fair per-clear comparison
+    // regardless of how many accessories fed into this row. For a single-accessory row this is
+    // always 1, so per-item behavior is unchanged (yourAvg === attempts).
     const clears = row.successes + row.pity;
-    const avg = perClear * clears;
-    const delta = row.attempts - avg;
+    const yourAvg = row.attempts / clears;
+    const delta = yourAvg - perClear;
     const sign = delta > 0 ? "+" : "";
     const cls = delta < 0 ? "good" : delta > 0 ? "bad" : "";
-    const avgText = clears > 1 ? `avg ${avg.toFixed(2)} (${perClear.toFixed(2)}&times;${clears})` : `avg ${avg.toFixed(2)}`;
-    return { avgText, deltaText: `${sign}${delta.toFixed(2)} vs avg`, cls };
+    return {
+      globalAvgText,
+      yourAvgText: `Your avg ${yourAvg.toFixed(2)}`,
+      comparisonText: `${sign}${delta.toFixed(2)} vs avg`,
+      cls,
+    };
   }
 
   function streakRowHtml(log, pityThreshold, centered) {
@@ -2031,31 +2135,32 @@
       drawBadgeCircle(ctx, {
         cx, cy, r, accent, iconImg, withIcon,
         drawCenter: (ctx) => {
+          // Doubled from the old 19/20px so the level reads at a glance. Both forms still
+          // shrink to fit: the widest numeral (VIII) is 80px at 38px type against an 84px
+          // circle, and the spelled-out levels (Alchemy's SHINING/RESPLENDENT) never fit at
+          // full size, so they step down until they do rather than overflowing the badge.
           const numeral = romanNumeralFor(acc.currentLevel);
+          const label = numeral || acc.currentLevel.toUpperCase();
+          const maxWidth = (r - 5) * 2; // keeps the widest numeral clear of the ring
+          let fontSize = 38;
+          ctx.font = `700 ${fontSize}px Georgia, serif`;
+          // 1px steps rather than 2px: only VIII needs trimming at all, and a coarse step would
+          // drop it further below the others than it has to.
+          while (ctx.measureText(label).width > maxWidth && fontSize > 9) {
+            fontSize -= 1;
+            ctx.font = `700 ${fontSize}px Georgia, serif`;
+          }
           if (numeral) {
             // White text with a black outline, same convention as the roman-numeral badges
-            // painted over icons everywhere else in the app.
-            ctx.font = "700 19px Georgia, serif";
-            ctx.lineWidth = 4;
+            // painted over icons everywhere else in the app. The outline scales with the type
+            // so it stays proportional at whatever size the fit loop settled on.
+            ctx.lineWidth = Math.max(3, Math.round(fontSize / 5));
             ctx.strokeStyle = "#000";
             ctx.lineJoin = "round";
-            ctx.strokeText(numeral, cx, cy + 6);
-            ctx.fillStyle = "#fff";
-            ctx.fillText(numeral, cx, cy + 6);
-          } else {
-            // Level names without a roman numeral vary a lot in length (Base, Shining, ...) --
-            // shrink the font until it fits the circle instead of letting long ones overflow it.
-            const label = acc.currentLevel.toUpperCase();
-            const maxWidth = (r - 12) * 2;
-            let fontSize = 20;
-            ctx.font = `700 ${fontSize}px Georgia, serif`;
-            while (ctx.measureText(label).width > maxWidth && fontSize > 9) {
-              fontSize -= 2;
-              ctx.font = `700 ${fontSize}px Georgia, serif`;
-            }
-            ctx.fillStyle = "#fff";
-            ctx.fillText(label, cx, cy + fontSize / 3);
+            ctx.strokeText(label, cx, cy + fontSize / 3);
           }
+          ctx.fillStyle = "#fff";
+          ctx.fillText(label, cx, cy + fontSize / 3);
         },
       });
 

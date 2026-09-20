@@ -747,27 +747,45 @@ select, input[type=number] {
   margin-bottom: 24px;
 }
 
+/* One shared set of columns for the whole list, so every column is exactly as wide as its widest
+   cell across ALL rows: every column's text starts at the same x on every row, left-aligned.
+   Columns: level | taps | successes | pity | fails | global avg | your avg | comparison |
+   success rate.
+
+   justify-content: space-between anchors the level column to the row's left edge and the success
+   rate column to its right edge, then splits ALL the leftover width evenly between the columns --
+   so every gap in the row is the same size, whatever the panel width. (A spare filler track
+   instead would pool that leftover into one oversized gap.) column-gap is only the floor for a
+   narrow panel.
+
+   Each row is a subgrid over those same tracks, so it can still be its own pill (background,
+   border, padding) while sharing the column sizing. Keeping every track max-content matters here:
+   a subgrid row's own padding is charged to its first and last tracks, and a max-content track
+   grows to cover that, where a fixed-width one would just get squeezed. */
 .level-rates-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(9, max-content);
+  justify-content: space-between;
+  column-gap: 24px;
+  row-gap: 6px;
 }
 
 .level-rate-row {
-  display: flex;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 12px;
   background: var(--panel-3);
   border: 1px solid var(--border-soft);
   border-radius: 7px;
   padding: 8px 12px;
   font-size: 0.83rem;
+  color: var(--text-dim);
 }
 
 /* box-shadow instead of a wider border-left -- a real border-left changes the box's content
-   width, nudging every column 2px right on in-progress rows only and breaking the alignment
-   the fixed-width columns above are there to guarantee. box-shadow paints over the edge without
-   affecting layout. */
+   width, nudging every column 2px right on in-progress rows only and breaking the alignment.
+   box-shadow paints over the edge without affecting layout. */
 .level-rate-row.in-progress {
   box-shadow: inset 3px 0 0 0 var(--accent);
 }
@@ -775,37 +793,19 @@ select, input[type=number] {
 .level-rate-badge {
   font-weight: 700;
   color: var(--gold);
-  width: 42px;
-  flex-shrink: 0;
-  /* On top of .level-rate-row's 12px flex gap, so the badge-to-taps gap is doubled (24px total)
-     without also widening the stats-to-pct gap at the row's other end. */
-  margin-right: 12px;
 }
 
-/* Fixed-width columns for taps/success/pity/fail -- these are the ones whose content genuinely
-   swings wildly ("0 successes" vs. "1 success", an in-progress tag appearing/vanishing), which is
-   what was actually cascading into misaligned rows. avg/delta use max-content (NOT auto): a plain
-   `auto` track size-maximizes to soak up whatever leftover space the row has, which is exactly why
-   these two ballooned apart with a huge gap on a wide panel -- max-content sizes strictly to its
-   own text and never grows past that. justify-content: start keeps the whole grid pinned to the
-   left rather than letting the row's extra width spread the columns apart at all; every column
-   then sits a consistent column-gap from the next, left-aligned, on any panel width. Every row
-   emits the same 6 spans in the same order (levelRateRowHtml), including empty ones, so each
-   always lands in the column it belongs to. */
+/* The wrapper span only groups the seven stat cells in the markup -- its children are the actual
+   grid items, so they land directly in the list's shared columns. Every row emits the same 7
+   spans in the same order (levelRateRowHtml), including empty ones, so each always lands in the
+   column it belongs to. */
 .level-rate-stats {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 52px 80px 46px 46px max-content max-content;
-  justify-content: start;
-  column-gap: 28px;
-  align-items: center;
-  color: var(--text-dim);
+  display: contents;
 }
 
 .level-rate-stats > span {
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-align: left;
 }
 
 .level-rate-tag {
@@ -840,15 +840,15 @@ select, input[type=number] {
    itself started at a different x on every row depending on how wide that row's own "25%" vs
    "100%" happened to be. */
 .level-rate-pct {
+  /* Fixed 120px, tight to "Success rate:" + the widest value ("100%") -- wider than that just let
+     justify-content: space-between stretch the gap between label and value, by a different amount
+     on every row depending on that row's own value width. This width is also what sizes the
+     list's last (max-content) track. */
+  width: 120px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  /* Tight to "Success rate:" + the widest value ("100%") -- wider than that just let
-     justify-content: space-between stretch the gap between them, and stretch it by a different
-     amount on every row depending on that row's own value width (0% vs 100%). */
-  width: 120px;
-  flex-shrink: 0;
   font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -918,7 +918,21 @@ select, input[type=number] {
 .hist-row.result-pity { border-left: 3px solid #5aa9e6; }
 .hist-row.result-adjust { border-left: 3px solid var(--text-faint); opacity: 0.8; }
 
+/* Fixed width, sized to the widest badge text ("Adjusted", ~80px) -- sized to its own content,
+   "Fail"/"Pity" pills were ~35px narrower than "Success"/"Adjusted", which pushed the description
+   text after them to a different x on every row instead of lining up. Text centered inside so the
+   pill still reads as a pill, just a consistent one. */
 .hist-badge {
+  box-sizing: border-box;
+  width: 84px;
+  flex-shrink: 0;
+  text-align: center;
+  /* 18px of clear space on BOTH sides of the badge. Each side already gets 12px -- the row's flex
+     gap on the right (and on the left too in Overall History, where the accessory tag precedes
+     it; in the per-item History the badge is first, so that 12px is the row's own left padding)
+     -- so 6px of margin tops each side up to a matching 18px. */
+  margin-left: 6px;
+  margin-right: 6px;
   padding: 2px 9px;
   border-radius: 20px;
   font-weight: 700;
@@ -989,7 +1003,7 @@ select, input[type=number] {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 108px;
+  width: 75px;
   flex-shrink: 0;
 }
 
@@ -1402,6 +1416,35 @@ select, input[type=number] {
   padding: 2px 4px;
 }
 .modal-close:hover { color: var(--text); }
+
+.contact-modal {
+  max-width: 420px;
+}
+
+.contact-body {
+  padding: 20px 22px 24px;
+}
+.contact-body p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+/* The handle is meant to be copied into Discord, so it reads as a selectable token rather than
+   as part of the sentence above it. */
+.contact-handle {
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: var(--panel-3);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 1rem;
+  text-align: center;
+  user-select: all;
+}
 
 .changelog-list {
   overflow-y: auto;
