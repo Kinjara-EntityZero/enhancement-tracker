@@ -7,6 +7,14 @@
   // Manually maintained, newest first. Add an entry here whenever a change ships.
   const CHANGELOG = [
     {
+      date: "2026-09-24",
+      title: "Overall share cards now show every accessory",
+      items: [
+        "The overall share card has a new Accessories strip under Rates by Level: each piece's icon, evenly spaced, with its current enhancement level over the top.",
+        "Trimmed the enhancement level drawn over the icon in the card header — it was oversized after the last pass.",
+      ],
+    },
+    {
       date: "2026-09-20",
       title: "Contact me",
       items: [
@@ -2033,6 +2041,73 @@
     ctx.fillRect(x1, y, x2 - x1, 2);
   }
 
+  // Every tracked accessory in the set, evenly spaced across the card: each one's icon with its
+  // current enhancement level painted over it. Mirrors the accessory grid at the top of the app,
+  // so a card summarizing the whole set still shows where each individual piece stands.
+  // `top` is the caption's baseline; the block runs to top + ACCESSORY_STRIP_H.
+  const ACCESSORY_STRIP_ICON = 58;
+  const ACCESSORY_STRIP_H = 24 + ACCESSORY_STRIP_ICON;
+
+  function drawAccessoryStrip(ctx, pieces, { M, W, top, accent, withIcon }) {
+    ctx.fillStyle = "#a496b8";
+    ctx.font = "700 12px -apple-system, Segoe UI, sans-serif";
+    ctx.fillText("ACCESSORIES", M, top);
+    drawDivider(ctx, M, W - M, top + 8, accent);
+
+    const size = ACCESSORY_STRIP_ICON;
+    const slotW = (W - M * 2) / pieces.length;
+    const iconTop = top + 24;
+
+    pieces.forEach((piece, i) => {
+      const cx = M + slotW * i + slotW / 2;
+      const x = cx - size / 2;
+
+      // Same tinted, rounded tile the accessory grid uses in the app.
+      const tile = ctx.createRadialGradient(cx, iconTop + size * 0.35, 4, cx, iconTop + size * 0.5, size * 0.75);
+      tile.addColorStop(0, hexToRgba(accent, 0.3));
+      tile.addColorStop(1, "#17111f");
+      ctx.fillStyle = tile;
+      roundRectPath(ctx, x, iconTop, size, size, 10);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 1;
+      roundRectPath(ctx, x, iconTop, size, size, 10);
+      ctx.stroke();
+
+      if (withIcon && piece.img) {
+        const inset = 6;
+        ctx.save();
+        roundRectPath(ctx, x + inset, iconTop + inset, size - inset * 2, size - inset * 2, 6);
+        ctx.clip();
+        ctx.drawImage(piece.img, x + inset, iconTop + inset, size - inset * 2, size - inset * 2);
+        ctx.restore();
+      }
+
+      // White with a black outline, same convention as the big badge circle. Allowed to spill a
+      // little past the tile (spelled-out levels like Alchemy's RESPLENDENT are wider than the
+      // icon, and the outline keeps those readable), but capped relative to the ICON rather than
+      // the slot -- a set with only three pieces has slots wide enough that fitting to them would
+      // render long names huge and sprawling instead of reading as a label on their icon.
+      const numeral = romanNumeralFor(piece.level);
+      const label = numeral || piece.level.toUpperCase();
+      const maxWidth = Math.min(slotW - 8, size * 1.6);
+      let fontSize = 20;
+      ctx.font = `700 ${fontSize}px Georgia, serif`;
+      while (ctx.measureText(label).width > maxWidth && fontSize > 9) {
+        fontSize -= 1;
+        ctx.font = `700 ${fontSize}px Georgia, serif`;
+      }
+      ctx.textAlign = "center";
+      ctx.lineWidth = Math.max(3, Math.round(fontSize / 5));
+      ctx.strokeStyle = "#000";
+      ctx.lineJoin = "round";
+      ctx.strokeText(label, cx, iconTop + size / 2 + fontSize / 3);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(label, cx, iconTop + size / 2 + fontSize / 3);
+      ctx.textAlign = "left";
+    });
+  }
+
   // Shared by the per-item share card and the overall (all-accessories) share card -- draws the
   // "RATES BY LEVEL" block starting at ratesTop, one row per level. Level names vary hugely in
   // width across sets (PRI/DEC vs. Alchemy's SHINING/RESPLENDENT), so the later columns can't sit
@@ -2281,8 +2356,13 @@
     win.document.close();
 
     const trackedIds = setDef.accessories.filter((a) => pieceStatus(setDef, setState, a.id).kind === "normal");
-    const iconSrc = trackedIds.length ? getAccessoryIcon(setDef, setState, trackedIds[0].id) : "";
-    const iconImg = await loadImage(iconSrc);
+    // Every tracked piece's own icon, for the accessory strip near the bottom of the card. The
+    // first one doubles as the header badge and the background watermark.
+    const pieces = await Promise.all(trackedIds.map(async (a) => ({
+      level: setState.accessories[a.id].currentLevel,
+      img: await loadImage(getAccessoryIcon(setDef, setState, a.id)),
+    })));
+    const iconImg = pieces.length ? pieces[0].img : null;
     if (win.closed) return;
 
     const accent = THEME_ACCENT[setDef.theme] || THEME_ACCENT.purple;
@@ -2314,8 +2394,16 @@
     const ratesRowH = 26;
     const ratesBlockH = levelRows.length ? 30 + levelRows.length * ratesRowH + 8 : 0;
     const afterRatesY = levelRows.length ? ratesTop + ratesBlockH : cursorY + 4;
-    const cronLineY = afterRatesY + (cronStats ? 12 : 0);
-    const H = cronLineY + (cronStats ? 28 : 0) + 40;
+    const accTop = afterRatesY + 22;
+    const afterAccY = pieces.length ? accTop + ACCESSORY_STRIP_H : afterRatesY;
+    const cronLineY = afterAccY + (cronStats ? 12 : 0);
+    // The trailing 40px is the footer (its divider sits at H - 40). With no Crons line -- every
+    // set but Ekleta -- the accessory icons are the last thing drawn, and their solid bottom edge
+    // would land exactly on that divider, so reserve the breathing room the Crons line would
+    // otherwise have provided.
+    const H = cronStats
+      ? cronLineY + 28 + 40
+      : cronLineY + (pieces.length ? 18 : 0) + 40;
 
     function draw(withIcon) {
       const canvas = document.createElement("canvas");
@@ -2389,6 +2477,10 @@
 
       if (levelRows.length) {
         drawRatesByLevelBlock(ctx, levelRows, { M, W, ratesTop, ratesRowH, accent });
+      }
+
+      if (pieces.length) {
+        drawAccessoryStrip(ctx, pieces, { M, W, top: accTop, accent, withIcon });
       }
 
       if (cronStats) {
