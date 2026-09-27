@@ -18,12 +18,15 @@
       <div id="file-sync" class="file-sync"></div>
       <button id="btn-changelog" class="btn btn-ghost" title="See what's changed recently">What's New<span class="changelog-dot" id="changelog-dot"></span></button>
       <button id="btn-contact" class="btn btn-ghost" title="Questions, bug reports, or feedback">Contact Me</button>
+      <button id="btn-options" class="btn btn-ghost" title="Set your display name and other preferences">Options</button>
       <button id="btn-export" class="btn btn-ghost" title="Download a one-off backup of all your data">Export</button>
       <button id="btn-import" class="btn btn-ghost" title="Restore data from a backup file">Import</button>
       <input type="file" id="file-import" accept="application/json" hidden>
       <button id="btn-reset-all" class="btn btn-ghost btn-danger" title="Erase all accessories and history">Reset All</button>
     </div>
   </header>
+
+  <div id="backup-banner"></div>
 
   <nav class="set-tabs" id="set-tabs"></nav>
 
@@ -44,6 +47,8 @@
 <div class="toast" id="toast"></div>
 <div id="changelog-modal-root"></div>
 <div id="contact-modal-root"></div>
+<div id="options-modal-root"></div>
+<div id="today-modal-root"></div>
 
 <script src="shared.js"></script>
 <script src="app.js"></script>

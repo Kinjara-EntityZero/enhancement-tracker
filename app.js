@@ -7,6 +7,32 @@
   // Manually maintained, newest first. Add an entry here whenever a change ships.
   const CHANGELOG = [
     {
+      date: "2026-09-26",
+      title: "Options menu",
+      items: [
+        "New Options button in the toolbar, holding a few preferences that save alongside your data.",
+        "Your name: set it once and it appears on share cards, e.g. “Kinjara – All Accessories”. Leave it blank to keep them as they were.",
+        "Sets you track: hide the ones you don't play. They disappear from the tabs, Overview and Overlays, and their data is kept in case you come back to them.",
+        "Start on: open the tracker on Overview, Overlays, a specific set, or just the last tab you used.",
+        "Remind me to back up: a banner when it's been a while since your last export. It stays quiet if you've linked a save file, since that already writes every change.",
+      ],
+    },
+    {
+      date: "2026-09-26",
+      title: "Show Today's Results",
+      items: [
+        "New button next to the accessory filter in Overall History: taps, successes, pity, fails and success rate for today, broken down by set, with the Crons you spent and every level you reached.",
+        "Counts every set, including ones you've hidden — it's a recap of your day rather than of the tab you're on.",
+      ],
+    },
+    {
+      date: "2026-09-26",
+      title: "Stats for Nerds stays how you left it",
+      items: [
+        "Expanding or collapsing the panel is remembered between visits instead of resetting to collapsed every time.",
+      ],
+    },
+    {
       date: "2026-09-24",
       title: "Overall share cards now show every accessory",
       items: [
@@ -210,7 +236,7 @@
   ];
 
   const {
-    SETS, SET_ORDER,
+    SETS, SET_ORDER, PLAYER_NAME_MAX, BACKUP_REMINDER_CHOICES, visibleSetKeys,
     nextLevel, isMaxed, freshSetState,
     computeStats, isPityEntry, currentFailStreak, longestFailStreak, currentStreak, longestStreak, levelBreakdown, normalizeState,
     detectClassVariants, getPieceOverride, detectLevelVariants, romanNumeralFor
@@ -309,6 +335,289 @@
   }
 
   document.getElementById("btn-contact").addEventListener("click", openContact);
+
+  // ---------- Options ----------
+
+  function closeOptions() {
+    document.getElementById("options-modal-root").innerHTML = "";
+  }
+
+  function setPlayerName(value) {
+    const name = (value || "").trim().slice(0, PLAYER_NAME_MAX);
+    if (name === state.options.playerName) return;
+    state.options.playerName = name;
+    save();
+  }
+
+  const BACKUP_REMINDER_LABELS = { 0: "Never", 7: "Weekly", 14: "Every 2 weeks", 30: "Monthly" };
+
+  function openOptions() {
+    const root = document.getElementById("options-modal-root");
+    const o = state.options;
+    const tabChoices = [["last", "Last one I used"], ["overview", "Overview"], ["overlays", "Overlays"]]
+      .concat(visibleSetKeys(o).map((k) => [k, SETS[k].label]));
+
+    root.innerHTML = `
+      <div class="modal-backdrop" id="options-backdrop">
+        <div class="modal-box options-modal">
+          <div class="modal-header">
+            <h2>Options</h2>
+            <button id="btn-close-options" class="modal-close" title="Close">&times;</button>
+          </div>
+          <div class="options-body">
+            <label class="options-field">
+              <span class="options-label">Your name</span>
+              <input type="text" id="options-name" maxlength="${PLAYER_NAME_MAX}" placeholder="Leave blank to hide" value="${escapeHtml(o.playerName)}">
+              <span class="options-hint">Shown on share cards, e.g. &ldquo;Kinjara &ndash; All Accessories&rdquo;.</span>
+            </label>
+
+            <div class="options-field">
+              <span class="options-label">Sets you track</span>
+              <div class="options-checks" id="options-sets">
+                ${SET_ORDER.map((key) => `
+                  <label class="options-check">
+                    <input type="checkbox" data-set="${key}" ${o.hiddenSets.includes(key) ? "" : "checked"}>
+                    <span>${escapeHtml(SETS[key].label)}</span>
+                  </label>
+                `).join("")}
+              </div>
+              <span class="options-hint">Unchecked sets are hidden from the tabs, Overview and Overlays. Their data is kept.</span>
+            </div>
+
+            <label class="options-field">
+              <span class="options-label">Start on</span>
+              <select id="options-default-tab">
+                ${tabChoices.map(([val, label]) => `<option value="${val}" ${o.defaultTab === val ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}
+              </select>
+            </label>
+
+            <label class="options-field">
+              <span class="options-label">Remind me to back up</span>
+              <select id="options-backup">
+                ${BACKUP_REMINDER_CHOICES.map((d) => `<option value="${d}" ${o.backupReminderDays === d ? "selected" : ""}>${BACKUP_REMINDER_LABELS[d]}</option>`).join("")}
+              </select>
+              <span class="options-hint">Only nags when no save file is linked &mdash; a linked file already saves every change.</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const input = document.getElementById("options-name");
+    // Committed on blur/Enter (same as the accessory rename field) and again on the way out, so
+    // typing a name and closing straight from the field doesn't lose it.
+    input.addEventListener("change", () => setPlayerName(input.value));
+
+    document.getElementById("options-sets").addEventListener("change", (e) => {
+      const box = e.target.closest("input[data-set]");
+      if (!box) return;
+      const checked = Array.from(document.querySelectorAll("#options-sets input[data-set]")).filter((b) => b.checked);
+      if (!checked.length) {
+        // Hiding every set would leave nothing to fall back to, so keep the last one.
+        box.checked = true;
+        showToast("Keep at least one set visible");
+        return;
+      }
+      state.options.hiddenSets = SET_ORDER.filter((k) =>
+        !document.querySelector(`#options-sets input[data-set="${k}"]`).checked);
+      if (SETS[state.activeSet] && state.options.hiddenSets.includes(state.activeSet)) {
+        state.activeSet = visibleSetKeys(state.options)[0];
+      }
+      save();
+      render();
+      refreshDefaultTabChoices();
+    });
+
+    // The landing-tab list only offers sets that are actually visible, so it has to be rebuilt
+    // whenever the checkboxes change.
+    function refreshDefaultTabChoices() {
+      const select = document.getElementById("options-default-tab");
+      const current = state.options.defaultTab;
+      const choices = [["last", "Last one I used"], ["overview", "Overview"], ["overlays", "Overlays"]]
+        .concat(visibleSetKeys(state.options).map((k) => [k, SETS[k].label]));
+      const stillValid = choices.some(([val]) => val === current);
+      if (!stillValid) {
+        state.options.defaultTab = "last";
+        save();
+      }
+      select.innerHTML = choices
+        .map(([val, label]) => `<option value="${val}" ${state.options.defaultTab === val ? "selected" : ""}>${escapeHtml(label)}</option>`)
+        .join("");
+    }
+
+    document.getElementById("options-default-tab").addEventListener("change", (e) => {
+      state.options.defaultTab = e.target.value;
+      save();
+    });
+
+    document.getElementById("options-backup").addEventListener("change", (e) => {
+      state.options.backupReminderDays = Number(e.target.value);
+      save();
+      renderBackupBanner();
+    });
+
+    const closeSaving = () => {
+      setPlayerName(input.value);
+      closeOptions();
+    };
+    document.getElementById("options-backdrop").addEventListener("click", (e) => {
+      if (e.target.id === "options-backdrop") closeSaving();
+    });
+    document.getElementById("btn-close-options").addEventListener("click", closeSaving);
+    input.focus();
+  }
+
+  document.getElementById("btn-options").addEventListener("click", openOptions);
+
+  // ---------- Backup reminder ----------
+  // Everything lives in localStorage, so one "clear site data" wipes it all. This nags when
+  // there's no linked save file doing that job already.
+
+  let backupNagDismissed = false;
+
+  function allRealEntries() {
+    return SET_ORDER.flatMap((key) =>
+      Object.values(state.sets[key].accessories).flatMap((acc) => acc.log));
+  }
+
+  function backupOverdue() {
+    const days = state.options.backupReminderDays;
+    if (!days || backupNagDismissed) return false;
+    if (fileHandle) return false; // a linked file already writes on every change
+    // With no export on record, count from the first thing they ever logged -- a fresh install
+    // with nothing in it has nothing worth nagging about.
+    const entries = allRealEntries();
+    if (!entries.length) return false;
+    const since = state.lastBackupAt || Math.min(...entries.map((e) => e.timestamp));
+    return Date.now() - since > days * 86400000;
+  }
+
+  function renderBackupBanner() {
+    const el = document.getElementById("backup-banner");
+    if (!backupOverdue()) { el.innerHTML = ""; return; }
+    const since = state.lastBackupAt;
+    const when = since
+      ? `Last backup was ${Math.floor((Date.now() - since) / 86400000)} days ago.`
+      : "You haven't backed up yet.";
+    el.innerHTML = `
+      <div class="backup-banner">
+        <span class="backup-banner-text">${when} Your data lives in this browser only &mdash; export a copy or link a save file.</span>
+        <button class="btn btn-ghost" id="btn-banner-export">Export now</button>
+        <button class="backup-banner-close" id="btn-banner-dismiss" title="Dismiss until next visit">&times;</button>
+      </div>
+    `;
+    document.getElementById("btn-banner-export").addEventListener("click", exportBackup);
+    document.getElementById("btn-banner-dismiss").addEventListener("click", () => {
+      backupNagDismissed = true;
+      renderBackupBanner();
+    });
+  }
+
+  // ---------- Today ----------
+
+  function startOfToday() {
+    return startOfLocalDay(Date.now());
+  }
+
+  // Everything logged today, across every set -- including hidden ones, since the point is a
+  // complete recap of the session rather than a view of the current tab.
+  function todaySummary() {
+    const from = startOfToday();
+    const sets = [];
+    let total = 0, successes = 0, pity = 0, fails = 0, crons = 0;
+    const reached = [];
+
+    SET_ORDER.forEach((key) => {
+      const setDef = SETS[key];
+      const setState = state.sets[key];
+      const entries = [];
+      setDef.accessories.forEach((def) => {
+        const acc = setState.accessories[def.id];
+        acc.log.forEach((e) => {
+          if (e.timestamp < from || e.type === "adjust") return;
+          entries.push(e);
+          if (e.type === "success" && !isPityEntry(e, setDef.pityThreshold)) {
+            reached.push({ name: acc.name, level: e.targetLevel, pity: false });
+          } else if (e.type === "success") {
+            reached.push({ name: acc.name, level: e.targetLevel, pity: true });
+          }
+          if (setDef.cronCost && e.type !== "adjust") {
+            // A pity-guaranteed click is free, same rule as the Crons box in Stats for Nerds.
+            const cost = setDef.cronCost[e.targetLevel];
+            if (cost != null && !(e.type === "success" && isPityEntry(e, setDef.pityThreshold))) crons += cost;
+          }
+        });
+      });
+      if (!entries.length) return;
+      const s = computeStats(entries, setDef.pityThreshold);
+      sets.push({ key, label: setDef.label, theme: setDef.theme, ...s });
+      total += s.total; successes += s.successes; pity += s.pity; fails += s.fails;
+    });
+
+    const rate = total ? Math.round((successes / total) * 100) : 0;
+    return { total, successes, pity, fails, rate, sets, reached, crons };
+  }
+
+  function closeToday() {
+    document.getElementById("today-modal-root").innerHTML = "";
+  }
+
+  function openToday() {
+    const t = todaySummary();
+    const dateLabel = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+
+    const body = !t.total
+      ? `<div class="today-empty">Nothing logged yet today.</div>`
+      : `
+        <div class="stats-row today-stats">
+          <div class="stat"><div class="val">${t.total}</div><div class="lbl">Taps</div></div>
+          <div class="stat"><div class="val">${t.successes}</div><div class="lbl">Successes</div></div>
+          <div class="stat"><div class="val">${t.pity}</div><div class="lbl">Pity</div></div>
+          <div class="stat"><div class="val">${t.fails}</div><div class="lbl">Fails</div></div>
+          <div class="stat"><div class="val">${t.rate}%</div><div class="lbl">Success Rate</div></div>
+        </div>
+        ${t.crons ? `<div class="today-crons">${t.crons.toLocaleString()} Crons spent today</div>` : ""}
+        <div class="today-caption">By set</div>
+        <div class="today-sets">
+          ${t.sets.map((s) => `
+            <div class="today-set-row" data-theme="${s.theme || ""}">
+              <span class="today-set-name">${escapeHtml(s.label)}</span>
+              <span class="today-set-stats">
+                <span>${s.total} tap${s.total === 1 ? "" : "s"}</span>
+                <span class="level-rate-success">${s.successes} success${s.successes === 1 ? "" : "es"}</span>
+                <span class="level-rate-pity">${s.pity} pity</span>
+                <span class="level-rate-fail">${s.fails} fail${s.fails === 1 ? "" : "s"}</span>
+              </span>
+              <span class="today-set-rate">${s.rate}%</span>
+            </div>
+          `).join("")}
+        </div>
+        ${t.reached.length ? `
+          <div class="today-caption">Levels reached</div>
+          <div class="today-reached">
+            ${t.reached.map((r) => `
+              <span class="today-reached-pill${r.pity ? " pity" : ""}">${escapeHtml(r.name)} &rarr; ${r.level.toUpperCase()}</span>
+            `).join("")}
+          </div>
+        ` : ""}
+      `;
+
+    document.getElementById("today-modal-root").innerHTML = `
+      <div class="modal-backdrop" id="today-backdrop">
+        <div class="modal-box today-modal">
+          <div class="modal-header">
+            <h2>Today &mdash; ${escapeHtml(dateLabel)}</h2>
+            <button id="btn-close-today" class="modal-close" title="Close">&times;</button>
+          </div>
+          <div class="today-body">${body}</div>
+        </div>
+      </div>
+    `;
+    document.getElementById("today-backdrop").addEventListener("click", (e) => {
+      if (e.target.id === "today-backdrop") closeToday();
+    });
+    document.getElementById("btn-close-today").addEventListener("click", closeToday);
+  }
 
   // ---------- Stats for Nerds ----------
   // Deeper, opt-in stats computed cumulatively across every trackable accessory in the set —
@@ -567,7 +876,7 @@
     if (!n.total) {
       panel.innerHTML = `
         ${nerdStatsToggleHtml()}
-        ${statsForNerdsOpen ? `<div class="nerd-stats-empty">Log a few attempts to unlock these.</div>` : ""}
+        ${state.options.statsForNerdsOpen ? `<div class="nerd-stats-empty">Log a few attempts to unlock these.</div>` : ""}
       `;
     } else {
       const setLevelRows = computeSetLevelBreakdown(setDef, setState);
@@ -578,7 +887,7 @@
 
       panel.innerHTML = `
         ${nerdStatsToggleHtml()}
-        ${statsForNerdsOpen ? `
+        ${state.options.statsForNerdsOpen ? `
           <div class="nerd-stats-grid">
             ${nerdStatHtml(
               "Busiest day",
@@ -634,11 +943,12 @@
           ` : ""}
         ` : ""}
       `;
-      if (statsForNerdsOpen) attachHistogramTooltips(panel);
+      if (state.options.statsForNerdsOpen) attachHistogramTooltips(panel);
     }
 
     document.getElementById("btn-toggle-nerd-stats").addEventListener("click", () => {
-      statsForNerdsOpen = !statsForNerdsOpen;
+      state.options.statsForNerdsOpen = !state.options.statsForNerdsOpen;
+      save();
       renderNerdStatsPanel();
     });
   }
@@ -647,7 +957,7 @@
     return `
       <button class="nerd-stats-toggle" id="btn-toggle-nerd-stats">
         <h3>Stats for Nerds</h3>
-        <span class="nerd-stats-caret">${statsForNerdsOpen ? "&#9650;" : "&#9660;"}</span>
+        <span class="nerd-stats-caret">${state.options.statsForNerdsOpen ? "&#9650;" : "&#9660;"}</span>
       </button>
     `;
   }
@@ -770,6 +1080,12 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
+  // Set when the loaded save still had the display name at the top level, so the migrated shape
+  // gets written back once. Deliberately not an unconditional save-on-load: savedAt is what the
+  // import/link comparison uses to decide which copy is newer, and it should mean "last changed"
+  // rather than "last opened".
+  let migratedOnLoad = false;
+
   function loadState() {
     let raw;
     try {
@@ -777,12 +1093,22 @@
     } catch (e) {
       raw = null;
     }
+    migratedOnLoad = !!(raw && typeof raw.playerName === "string");
     return normalizeState(raw);
   }
 
   let state = loadState();
   let overallFilter = "all";
-  let statsForNerdsOpen = false;
+
+  // Apply the landing-tab preference before the first render. "last" leaves the persisted
+  // activeSet alone; anything else overrides it (and gets persisted in turn, so switching tabs
+  // during a session still works normally -- it just won't stick across reloads).
+  if (state.options.defaultTab !== "last") {
+    const wanted = state.options.defaultTab;
+    if (wanted === "overview" || wanted === "overlays" || visibleSetKeys(state.options).includes(wanted)) {
+      state.activeSet = wanted;
+    }
+  }
 
   // The set (Ekleta / Apeiron / Edana / Sovereign / ...) currently shown in the UI, and its config/state shortcuts.
   function activeSetDef() {
@@ -1091,6 +1417,8 @@
   }
 
   function renderFileStatus() {
+    // Linking or unlinking a file changes whether the backup reminder has anything to nag about.
+    renderBackupBanner();
     const el = document.getElementById("file-sync");
     if (!FS_SUPPORTED) {
       el.innerHTML = "";
@@ -1246,6 +1574,7 @@
 
   function render() {
     renderTabs();
+    renderBackupBanner();
     const overview = state.activeSet === "overview";
     const overlays = state.activeSet === "overlays";
     const normal = !overview && !overlays;
@@ -1301,7 +1630,7 @@
     const el = document.getElementById("set-tabs");
     const overviewBtn = `<button class="set-tab overview-tab${state.activeSet === "overview" ? " active" : ""}" data-set="overview">&#9733; Overview</button>`;
     const overlaysBtn = `<button class="set-tab overview-tab${state.activeSet === "overlays" ? " active" : ""}" data-set="overlays">&#8862; Overlays</button>`;
-    const setBtns = SET_ORDER.map((key) => {
+    const setBtns = visibleSetKeys(state.options).map((key) => {
       const def = SETS[key];
       return `<button class="set-tab${key === state.activeSet ? " active" : ""}" data-set="${key}" data-theme="${def.theme || ""}">${def.label}</button>`;
     }).join("");
@@ -1656,10 +1985,13 @@
     panel.innerHTML = `
       <div class="overall-header">
         <h3>Overall History (${filtered.length})</h3>
-        <select class="overall-filter" id="overall-filter">
-          <option value="all" ${overallFilter === "all" ? "selected" : ""}>All accessories</option>
-          ${setDef.accessories.map((def) => `<option value="${def.id}" ${overallFilter === def.id ? "selected" : ""}>${escapeHtml(setState.accessories[def.id].name)}</option>`).join("")}
-        </select>
+        <div class="overall-header-actions">
+          <select class="overall-filter" id="overall-filter">
+            <option value="all" ${overallFilter === "all" ? "selected" : ""}>All accessories</option>
+            ${setDef.accessories.map((def) => `<option value="${def.id}" ${overallFilter === def.id ? "selected" : ""}>${escapeHtml(setState.accessories[def.id].name)}</option>`).join("")}
+          </select>
+          <button class="btn btn-ghost" id="btn-today" title="Summary of everything you've logged today">Show Today's Results</button>
+        </div>
       </div>
       <div class="stats-caption">Overall &mdash; every level combined${overallFilter === "all" ? ", all accessories" : ""}</div>
       <div class="stats-row" style="margin-top:0; margin-bottom:14px;">
@@ -1677,6 +2009,8 @@
       overallFilter = e.target.value;
       renderOverallHistory();
     });
+    // Wired here rather than once at startup: this panel re-renders, replacing the button.
+    document.getElementById("btn-today").addEventListener("click", openToday);
     panel.querySelectorAll(".hist-row[data-acc-id]").forEach((row) => {
       row.addEventListener("click", () => {
         activeSetState().selectedId = row.dataset.accId;
@@ -1713,7 +2047,7 @@
 
   function renderOverviewPanel() {
     const panel = document.getElementById("overview-panel");
-    const summaries = SET_ORDER.map((key) => setSummary(key));
+    const summaries = visibleSetKeys(state.options).map((key) => setSummary(key));
 
     const cardsHtml = summaries.map((s) => {
       const pct = s.totalCount ? Math.round((s.maxedCount / s.totalCount) * 100) : 0;
@@ -1818,7 +2152,7 @@
   function renderOverlaysPanel() {
     const panel = document.getElementById("overlays-panel");
 
-    const cardsHtml = SET_ORDER.map((key) => {
+    const cardsHtml = visibleSetKeys(state.options).map((key) => {
       const def = SETS[key];
       return `
         <div class="overlay-card" data-theme="${def.theme || ""}">
@@ -2032,6 +2366,21 @@
     });
   }
 
+  // A share card's headline. Prefixed with the Options display name when one is set, and shrunk
+  // to fit the space left of the badge circle -- a long name plus a long accessory name would
+  // otherwise run straight under (or past) it.
+  function drawCardTitle(ctx, title, { M, baseline, maxRight }) {
+    const text = state.playerName ? `${state.playerName} – ${title}` : title;
+    let fontSize = 32;
+    ctx.font = `700 ${fontSize}px Georgia, serif`;
+    while (ctx.measureText(text).width > maxRight - M && fontSize > 16) {
+      fontSize -= 1;
+      ctx.font = `700 ${fontSize}px Georgia, serif`;
+    }
+    ctx.fillStyle = "#f2ecf7";
+    ctx.fillText(text, M, baseline);
+  }
+
   // Thin accent-to-transparent divider line, used to separate major sections of a card.
   function drawDivider(ctx, x1, x2, y, accent) {
     const grad = ctx.createLinearGradient(x1, 0, x2, 0);
@@ -2200,13 +2549,11 @@
       drawShareCardBackground(ctx, W, H, accent, iconImg, withIcon);
       drawPillLabel(ctx, setDef.label.toUpperCase(), M, 26, accent);
 
-      ctx.fillStyle = "#f2ecf7";
-      ctx.font = "700 32px Georgia, serif";
-      ctx.fillText(acc.name, M, 84);
-
       // Smaller than before (was r=56) and nudged up -- at the old size its glow reached down far
       // enough to overlap the Success Rate chip below it.
       const cx = W - 84, cy = 70, r = 42;
+      drawCardTitle(ctx, acc.name, { M, baseline: 84, maxRight: cx - r * 1.4 - 12 });
+
       drawBadgeCircle(ctx, {
         cx, cy, r, accent, iconImg, withIcon,
         drawCenter: (ctx) => {
@@ -2414,13 +2761,11 @@
       drawShareCardBackground(ctx, W, H, accent, iconImg, withIcon);
       drawPillLabel(ctx, setDef.label.toUpperCase(), M, 26, accent);
 
-      ctx.fillStyle = "#f2ecf7";
-      ctx.font = "700 32px Georgia, serif";
-      ctx.fillText("All Accessories", M, 84);
-
       // Smaller than before (was r=56) and nudged up -- at the old size its glow reached down far
       // enough to overlap the Success Rate chip below it.
       const cx = W - 84, cy = 70, r = 42;
+      drawCardTitle(ctx, "All Accessories", { M, baseline: 84, maxRight: cx - r * 1.4 - 12 });
+
       drawBadgeCircle(ctx, {
         cx, cy, r, accent, iconImg, withIcon,
         // "3/6" maxed-count overlay instead of a single roman numeral -- there's no one level to
@@ -2560,7 +2905,7 @@
 
   // ---------- Export / Import / Reset ----------
 
-  document.getElementById("btn-export").addEventListener("click", () => {
+  function exportBackup() {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2569,8 +2914,13 @@
     a.download = `accessory-tracker-backup-${stamp}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    state.lastBackupAt = Date.now();
+    save();
+    renderBackupBanner();
     showToast("Backup downloaded");
-  });
+  }
+
+  document.getElementById("btn-export").addEventListener("click", exportBackup);
 
   document.getElementById("btn-import").addEventListener("click", () => {
     document.getElementById("file-import").click();
@@ -2620,6 +2970,9 @@
   renderFileStatus();
   updateChangelogDot();
   tryReconnectFile();
+  // Deferred to here rather than run beside loadState(): save() reaches queueFileSync(), which
+  // reads the `fileHandle` binding declared further down.
+  if (migratedOnLoad) save();
   SET_ORDER.forEach((key) => {
     if (SETS[key].classVariant) loadClassVariants(key);
     if (SETS[key].levelVariant) loadLevelVariants(key);

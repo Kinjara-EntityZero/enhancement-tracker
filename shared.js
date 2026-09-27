@@ -158,6 +158,44 @@
   // Tab order on the main sheet. Append new set keys here as they're added to SETS.
   const SET_ORDER = ["ekleta", "apeiron", "edana", "sovereign", "alchemy"];
 
+  // Cap on the Options display name. Long enough for a family name, short enough that a share
+  // card's title still fits beside the badge circle.
+  const PLAYER_NAME_MAX = 24;
+
+  // How often the backup reminder is allowed to nag, in days. 0 turns it off.
+  const BACKUP_REMINDER_CHOICES = [0, 7, 14, 30];
+
+  const DEFAULT_OPTIONS = {
+    playerName: "",
+    hiddenSets: [],          // set keys to drop from the tab bar, Overview and Overlays
+    statsForNerdsOpen: false,
+    defaultTab: "last",      // "last" | "overview" | "overlays" | a set key
+    backupReminderDays: 14,
+  };
+
+  // Options are user preferences rather than tracked progress, so they're coerced hard here:
+  // they ride along in the save file and through export/import, where a hand-edited or stale
+  // file could otherwise feed nonsense straight into rendering.
+  function normalizeOptions(raw) {
+    const o = raw && typeof raw === "object" ? raw : {};
+    const hidden = Array.isArray(o.hiddenSets) ? o.hiddenSets.filter((k) => SETS[k]) : [];
+    return {
+      playerName: typeof o.playerName === "string" ? o.playerName.trim().slice(0, PLAYER_NAME_MAX) : "",
+      // Never hide everything -- that would leave the tab bar with no set to fall back to.
+      hiddenSets: hidden.length >= SET_ORDER.length ? [] : hidden,
+      statsForNerdsOpen: !!o.statsForNerdsOpen,
+      defaultTab: o.defaultTab === "overview" || o.defaultTab === "overlays" || SETS[o.defaultTab] ? o.defaultTab : "last",
+      backupReminderDays: BACKUP_REMINDER_CHOICES.includes(o.backupReminderDays) ? o.backupReminderDays : DEFAULT_OPTIONS.backupReminderDays,
+    };
+  }
+
+  // Sets the user actually tracks, in tab order. Always at least one (see normalizeOptions).
+  function visibleSetKeys(options) {
+    const hidden = (options && options.hiddenSets) || [];
+    const keys = SET_ORDER.filter((k) => !hidden.includes(k));
+    return keys.length ? keys : SET_ORDER.slice();
+  }
+
   function nextLevel(level, levels) {
     const ladder = levels || DEFAULT_LEVELS;
     const i = ladder.indexOf(level);
@@ -430,11 +468,27 @@
     // downloads), not real sets in SETS.
     const PSEUDO_TABS = ["overview", "overlays"];
     if (!raw.activeSet || (!SETS[raw.activeSet] && !PSEUDO_TABS.includes(raw.activeSet))) raw.activeSet = "ekleta";
+
+    // Preferences live under `options`. An early build kept the display name at the top level,
+    // so fold that in before normalizing and drop the stray key.
+    if (typeof raw.playerName === "string" && !(raw.options && raw.options.playerName)) {
+      raw.options = Object.assign({}, raw.options, { playerName: raw.playerName });
+    }
+    delete raw.playerName;
+    raw.options = normalizeOptions(raw.options);
+
+    // When the landing tab points at a set the user has since hidden, fall back rather than
+    // opening a tab that isn't in the bar.
+    const visible = visibleSetKeys(raw.options);
+    if (SETS[raw.activeSet] && !visible.includes(raw.activeSet)) raw.activeSet = visible[0];
+
+    raw.lastBackupAt = typeof raw.lastBackupAt === "number" ? raw.lastBackupAt : null;
     return raw;
   }
 
   global.EnhancementShared = {
-    DEFAULT_LEVELS, SETS, SET_ORDER, WEAPON_CLASSES,
+    DEFAULT_LEVELS, SETS, SET_ORDER, WEAPON_CLASSES, PLAYER_NAME_MAX,
+    BACKUP_REMINDER_CHOICES, DEFAULT_OPTIONS, normalizeOptions, visibleSetKeys,
     nextLevel, isMaxed, freshAccessoryState, freshSetState,
     computeStats, isPityEntry, currentFailStreak, longestFailStreak, currentStreak, longestStreak, levelBreakdown, normalizeState,
     detectClassVariants, getPieceOverride, detectLevelVariants, romanNumeralFor
