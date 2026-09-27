@@ -2370,7 +2370,8 @@
   // to fit the space left of the badge circle -- a long name plus a long accessory name would
   // otherwise run straight under (or past) it.
   function drawCardTitle(ctx, title, { M, baseline, maxRight }) {
-    const text = state.playerName ? `${state.playerName} – ${title}` : title;
+    const name = state.options.playerName;
+    const text = name ? `${name} – ${title}` : title;
     let fontSize = 32;
     ctx.font = `700 ${fontSize}px Georgia, serif`;
     while (ctx.measureText(text).width > maxRight - M && fontSize > 16) {
