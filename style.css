@@ -1547,8 +1547,11 @@ select, input[type=number] {
 
 /* ---------- Today summary ---------- */
 
+/* Wider than the other modals: the by-set rows are a seven-column table, and at 560px a long set
+   name with three-digit counts ("Alchemy Stones · 239 taps · 111 successes...") spilled past the
+   edge. */
 .today-modal {
-  max-width: 560px;
+  max-width: 700px;
 }
 
 .today-body {
@@ -1580,39 +1583,96 @@ select, input[type=number] {
   margin: 18px 0 8px;
 }
 
+/* Same treatment as Rates by Level: one shared set of columns for every row, sized to the widest
+   cell, with justify-content: space-between anchoring the set name left and the rate right and
+   splitting the leftover width evenly so every gap in the row matches. Each row is a subgrid over
+   those tracks so it keeps its own pill background. Columns: name | taps | successes | pity |
+   fails | expander | rate. */
 .today-sets {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(7, max-content);
+  justify-content: space-between;
+  column-gap: 18px;
+  row-gap: 6px;
+  /* Backstop for content even wider than the widened modal (a long custom name, four-digit
+     counts): scroll this section rather than letting a row burst out of the dialog. */
+  overflow-x: auto;
 }
 
 .today-set-row {
-  display: flex;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 14px;
   background: var(--panel-3);
   border: 1px solid var(--border-soft);
   border-radius: 7px;
   padding: 8px 12px;
   font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.today-set-row > span {
+  white-space: nowrap;
+  text-align: left;
 }
 
 .today-set-name {
-  width: 108px;
-  flex-shrink: 0;
   font-weight: 700;
   color: var(--gold);
 }
 
-.today-set-stats {
-  flex: 1;
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
+.today-set-rate {
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.today-expander {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 2rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  justify-self: end;
+}
+.today-expander:hover { color: var(--gold); }
+
+/* Spans the full width under its row, and carries its own shared columns for the pieces. */
+.today-set-detail {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(7, max-content);
+  justify-content: space-between;
+  column-gap: 18px;
+  row-gap: 4px;
+  margin: -2px 0 4px;
+  padding: 8px 12px 10px 26px;
+  border-left: 2px solid var(--border-soft);
+}
+/* An author-level `display` beats the UA rule behind the hidden attribute, so collapse explicitly. */
+.today-set-detail[hidden] { display: none; }
+
+.today-piece-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  font-size: 0.78rem;
   color: var(--text-dim);
 }
 
-.today-set-rate {
+.today-piece-row > span {
+  white-space: nowrap;
+  text-align: left;
+}
+
+.today-piece-name { color: var(--text); }
+.today-piece-levels { color: var(--text-faint); }
+
+.today-piece-rate {
   font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;

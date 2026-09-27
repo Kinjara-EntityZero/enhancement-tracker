@@ -7,6 +7,15 @@
   // Manually maintained, newest first. Add an entry here whenever a change ships.
   const CHANGELOG = [
     {
+      date: "2026-09-27",
+      title: "Today's Results now breaks down every set",
+      items: [
+        "Each set in the by-set list has an arrow at the end of its row. Open it to see the taps behind that percentage: every piece you touched, the levels you tapped it at, and its own successes, pity, fails and rate.",
+        "The by-set rows use the same column treatment as Rates by Level — set name on the left, rate on the right, and the space between split evenly so every gap matches.",
+        "Repeats in Levels reached are grouped, so twelve clears of the same piece read as one entry with a count instead of twelve identical pills.",
+      ],
+    },
+    {
       date: "2026-09-26",
       title: "Options menu",
       items: [
@@ -531,31 +540,48 @@
       const setDef = SETS[key];
       const setState = state.sets[key];
       const entries = [];
+      const pieces = [];
       setDef.accessories.forEach((def) => {
         const acc = setState.accessories[def.id];
+        const mine = [];
         acc.log.forEach((e) => {
           if (e.timestamp < from || e.type === "adjust") return;
           entries.push(e);
+          mine.push(e);
           if (e.type === "success" && !isPityEntry(e, setDef.pityThreshold)) {
             reached.push({ name: acc.name, level: e.targetLevel, pity: false });
           } else if (e.type === "success") {
             reached.push({ name: acc.name, level: e.targetLevel, pity: true });
           }
-          if (setDef.cronCost && e.type !== "adjust") {
+          if (setDef.cronCost) {
             // A pity-guaranteed click is free, same rule as the Crons box in Stats for Nerds.
             const cost = setDef.cronCost[e.targetLevel];
             if (cost != null && !(e.type === "success" && isPityEntry(e, setDef.pityThreshold))) crons += cost;
           }
         });
+        if (!mine.length) return;
+        // Levels this piece was actually tapped at today, in the order they were attempted.
+        const levels = [];
+        mine.forEach((e) => { if (!levels.includes(e.targetLevel)) levels.push(e.targetLevel); });
+        pieces.push({ name: acc.name, levels, ...computeStats(mine, setDef.pityThreshold) });
       });
       if (!entries.length) return;
       const s = computeStats(entries, setDef.pityThreshold);
-      sets.push({ key, label: setDef.label, theme: setDef.theme, ...s });
+      sets.push({ key, label: setDef.label, theme: setDef.theme, pieces, ...s });
       total += s.total; successes += s.successes; pity += s.pity; fails += s.fails;
     });
 
+    // Collapse repeats of the same piece reaching the same level into one pill with a count --
+    // on a heavy day this list would otherwise run to dozens of identical entries.
+    const grouped = [];
+    reached.forEach((r) => {
+      const hit = grouped.find((g) => g.name === r.name && g.level === r.level && g.pity === r.pity);
+      if (hit) hit.count++;
+      else grouped.push({ ...r, count: 1 });
+    });
+
     const rate = total ? Math.round((successes / total) * 100) : 0;
-    return { total, successes, pity, fails, rate, sets, reached, crons };
+    return { total, successes, pity, fails, rate, sets, reached: grouped, crons };
   }
 
   function closeToday() {
@@ -582,13 +608,26 @@
           ${t.sets.map((s) => `
             <div class="today-set-row" data-theme="${s.theme || ""}">
               <span class="today-set-name">${escapeHtml(s.label)}</span>
-              <span class="today-set-stats">
-                <span>${s.total} tap${s.total === 1 ? "" : "s"}</span>
-                <span class="level-rate-success">${s.successes} success${s.successes === 1 ? "" : "es"}</span>
-                <span class="level-rate-pity">${s.pity} pity</span>
-                <span class="level-rate-fail">${s.fails} fail${s.fails === 1 ? "" : "s"}</span>
-              </span>
+              <span>${s.total} tap${s.total === 1 ? "" : "s"}</span>
+              <span class="level-rate-success">${s.successes} success${s.successes === 1 ? "" : "es"}</span>
+              <span class="level-rate-pity">${s.pity} pity</span>
+              <span class="level-rate-fail">${s.fails} fail${s.fails === 1 ? "" : "s"}</span>
               <span class="today-set-rate">${s.rate}%</span>
+              <button class="today-expander" data-set="${s.key}" aria-expanded="false"
+                      title="Show the taps behind this">&#9656;</button>
+            </div>
+            <div class="today-set-detail" data-detail="${s.key}" hidden>
+              ${s.pieces.map((p) => `
+                <div class="today-piece-row">
+                  <span class="today-piece-name">${escapeHtml(p.name)}</span>
+                  <span class="today-piece-levels">${p.levels.map((l) => l.toUpperCase()).join(", ")}</span>
+                  <span>${p.total} tap${p.total === 1 ? "" : "s"}</span>
+                  <span class="level-rate-success">${p.successes} success${p.successes === 1 ? "" : "es"}</span>
+                  <span class="level-rate-pity">${p.pity} pity</span>
+                  <span class="level-rate-fail">${p.fails} fail${p.fails === 1 ? "" : "s"}</span>
+                  <span class="today-piece-rate">${p.rate}%</span>
+                </div>
+              `).join("")}
             </div>
           `).join("")}
         </div>
@@ -596,7 +635,7 @@
           <div class="today-caption">Levels reached</div>
           <div class="today-reached">
             ${t.reached.map((r) => `
-              <span class="today-reached-pill${r.pity ? " pity" : ""}">${escapeHtml(r.name)} &rarr; ${r.level.toUpperCase()}</span>
+              <span class="today-reached-pill${r.pity ? " pity" : ""}">${escapeHtml(r.name)} &rarr; ${r.level.toUpperCase()}${r.count > 1 ? ` &times;${r.count}` : ""}</span>
             `).join("")}
           </div>
         ` : ""}
@@ -617,6 +656,19 @@
       if (e.target.id === "today-backdrop") closeToday();
     });
     document.getElementById("btn-close-today").addEventListener("click", closeToday);
+
+    // Toggled in place rather than by re-rendering the modal, so expanding one set doesn't
+    // collapse the others or jump the scroll position.
+    document.querySelectorAll(".today-expander").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const detail = document.querySelector(`.today-set-detail[data-detail="${btn.dataset.set}"]`);
+        const open = btn.getAttribute("aria-expanded") === "true";
+        btn.setAttribute("aria-expanded", open ? "false" : "true");
+        // Points right when collapsed, down when open.
+        btn.innerHTML = open ? "&#9656;" : "&#9662;";
+        detail.hidden = open;
+      });
+    });
   }
 
   // ---------- Stats for Nerds ----------
